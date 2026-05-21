@@ -501,9 +501,17 @@ function set(p){
 }
 
 // ── 토스트 메시지 ──────────────────────────────────────────
-function toast(msg,dur=2200){
-  S.msg=msg; render();
-  setTimeout(()=>{S.msg=""; render();},dur);
+function toast(msg,dur=2500){
+  // DOM 직접 삽입 (render 비의존)
+  let el=document.getElementById("toast-float");
+  if(el)el.remove();
+  if(!msg)return;
+  el=document.createElement("div");
+  el.id="toast-float";
+  el.style.cssText="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#2D2150,#6C63FF);color:#fff;padding:12px 26px;border-radius:50px;font-size:13px;font-weight:700;box-shadow:0 8px 28px rgba(108,99,255,.4);z-index:99999;white-space:nowrap;animation:pop .3s ease";
+  el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>{if(el&&el.parentNode)el.remove();},dur);
 }
 
 // ── 이벤트 헬퍼 ───────────────────────────────────────────
