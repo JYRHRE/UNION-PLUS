@@ -2053,14 +2053,31 @@ function bindEv(){
   if(menu==="surveyProg"){
     on("bk",()=>set({menu:"svStart"}));
     const s=students.find(x=>x.id===sid),qs=s?getQsLang(s.grade,S.surveyLang||'ko'):[];
-    onA(".ob",e=>{const val=Number(e.target.closest("[data-val]").dataset.val);const q=qs[cq];const na={...ans,[q.id]:val};if(cq<qs.length-1)set({sAns:na,sQ:cq+1});else set({sAns:na});});
+    onA(".ob",e=>{const el=e.target.closest("[data-val]");if(!el)return;const val=Number(el.dataset.val);const q=qs[cq];if(!q)return;const na={...ans,[q.id]:val};if(cq<qs.length-1)set({sAns:na,sQ:cq+1});else set({sAns:na});});
     on("btn-prev",()=>{if(cq>0)set({sQ:cq-1});});
     on("btn-next",()=>{if(ans[qs[cq].id]!=null&&cq<qs.length-1)set({sQ:cq+1});});
-    on("btn-submit",()=>{if(qs.every(q=>ans[q.id]!=null)){const scores=calcSc(ans,s.grade,S.surveyLang||"ko");const newEntry={date:td(),scores};
-          const updatedStudents=S.students.map(x=>{if(x.id!==sid)return x;const hist=x.scoreHistory||[];return{...x,scores,scoreHistory:[...hist,newEntry]};});
-          const doneStu=updatedStudents.find(x=>x.id===sid);
-          if(doneStu){dbSaveStudent(doneStu).catch(()=>{});}
-          set({students:updatedStudents,menu:"result"});toast("진단이 완료되었습니다!");}});
+    on("btn-submit",()=>{
+      const unanswered=qs.filter(q=>ans[q.id]==null);
+      if(unanswered.length>0){
+        const nums=unanswered.map(q=>qs.indexOf(q)+1).slice(0,5).join(", ");
+        toast("아직 "+unanswered.length+"개 문항이 남았어요 ("+nums+"번...)");
+        // 첫 번째 미답 문항으로 이동
+        const firstIdx=qs.indexOf(unanswered[0]);
+        set({sQ:firstIdx});
+        return;
+      }
+      const scores=calcSc(ans,s.grade,S.surveyLang||"ko");
+      const newEntry={date:td(),scores};
+      const updatedStudents=S.students.map(x=>{
+        if(x.id!==sid)return x;
+        const hist=x.scoreHistory||[];
+        return{...x,scores,scoreHistory:[...hist,newEntry]};
+      });
+      const doneStu=updatedStudents.find(x=>x.id===sid);
+      if(doneStu){dbSaveStudent(doneStu).catch(()=>{});}
+      set({students:updatedStudents,menu:"result"});
+      toast("🎉 진단이 완료되었습니다!");
+    });
     onA(".qd",e=>set({sQ:Number(e.target.dataset.i)}));
     // 언어 토글 (진행 중)
     on("hdr-lang-toggle",()=>{
