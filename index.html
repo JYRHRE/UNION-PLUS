@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-21-04"/>
+<meta name="app-version" content="2026-08-22-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-21-04";
+const APP_VERSION = "2026-08-22-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1337,6 +1337,94 @@ function hRawAnswers(s){
 
 // 진단 결과에서 잘한 영역과 도와줄 영역을 뽑아 보여준다.
 // AI 호출 없이 점수만으로 계산하므로 항상 표시된다.
+const SUBT={
+ "정체성 인식":{
+   hi:"자신의 배경과 경험을 긍정적으로 받아들이고, 스스로를 설명할 때 여러 모습을 떠올릴 수 있습니다",
+   lo:"자기를 소개하거나 자신의 경험을 이야기할 때 아직 머뭇거리는 모습이 보입니다",
+   act:["자기소개 카드 만들기로 좋아하는 것·잘하는 것을 스스로 말해 보게 하기",
+        "가족과 함께 '나의 이야기' 한 장면을 그려 오게 한 뒤 학급에서 나누기"]},
+ "문화 다양성 이해":{
+   hi:"여러 나라의 문화와 생활 방식에 관심이 많고, 서로 다른 점을 자연스럽게 받아들입니다",
+   lo:"익숙하지 않은 문화를 이해하는 폭이 조금 더 넓어지면 좋겠습니다",
+   act:["세계 여러 나라의 인사말·놀이를 한 가지씩 체험해 보기",
+        "다문화 그림책을 함께 읽고 인상 깊은 장면 이야기 나누기"]},
+ "편견 인식 및 공감":{
+   hi:"친구의 감정을 잘 알아차리고, 상황을 상대의 입장에서 헤아려 봅니다",
+   lo:"굳어진 생각을 알아차리거나 상대의 마음을 헤아리는 데 도움이 필요합니다",
+   act:["역할을 바꿔 보는 활동으로 상대의 입장을 직접 경험하게 하기",
+        "감정 카드를 활용해 친구의 마음을 읽고 표현하는 연습하기"]},
+ "평등 기반 존중 태도":{
+   hi:"친구를 차별 없이 대하고, 공정하게 행동하려는 태도가 자리 잡혀 있습니다",
+   lo:"서로 다른 점을 존중하는 태도가 조금 더 자라면 좋겠습니다",
+   act:["학급 약속을 함께 만들며 '존중'이 무엇인지 우리 말로 정의해 보기",
+        "모둠을 정할 때 돌아가며 역할을 맡는 규칙을 함께 정하기"]},
+ "문화 간 소통":{
+   hi:"배경이 다른 친구와도 스스럼없이 이야기하고, 뜻이 잘 통하지 않으면 다시 시도합니다",
+   lo:"배경이 다른 친구에게 먼저 말을 걸거나 오해를 풀어가는 일이 아직 어렵습니다",
+   act:["대화를 여는 짧은 문장(같이 할래? 이거 뭐야?)을 함께 연습하기",
+        "짝 활동에서 서로 배경이 다른 친구와 자연스럽게 만나도록 자리 구성하기"]},
+ "공존 실천 및 협력":{
+   hi:"함께하는 활동에서 자기 몫을 해내고, 같이 하려는 마음이 뚜렷합니다",
+   lo:"함께하는 활동에서 한 걸음 물러서 있는 편입니다",
+   act:["역할이 분명하게 나뉜 모둠 과제를 맡겨 기여를 확인시켜 주기",
+        "승패보다 협동이 필요한 놀이로 함께하는 즐거움 경험하기"]}
+};
+
+// 진단 결과만으로 만드는 분석문. 인터넷도 API 키도 필요 없다.
+function autoAnalysis(s){
+  const r=subScores(s.scores);
+  if(!r)return null;
+  const rank=SUBS.map(k=>[k,Number(r[k])||0]).sort((a,b)=>b[1]-a[1]);
+  const hi=rank.slice(0,2), lo=rank.slice(-2).reverse();
+  const nm=String(s.name||"이 학생");
+
+  const strong=nm+" 학생은 "+hi.map(([k])=>"‘"+k+"’").join("과 ")+" 영역에서 비교적 안정된 모습을 보입니다. "
+    +SUBT[hi[0][0]].hi+". 또한 "+SUBT[hi[1][0]].hi+".";
+
+  const grow=SUBT[lo[0][0]].lo+". "+SUBT[lo[1][0]].lo.replace(/^./,c=>c)+". "
+    +"부족하다기보다 앞으로 자랄 여지가 있는 부분으로 보아 주시면 좋겠습니다.";
+
+  const acts=[SUBT[lo[0][0]].act[0], SUBT[lo[1][0]].act[0]];
+
+  // 회차가 쌓였으면 변화도 한 줄
+  let trend="";
+  const hh=s.scoreHistory||[];
+  if(hh.length>=2){
+    const a=subScores(hh[0].scores)||{}, b=subScores(hh[hh.length-1].scores)||{};
+    const ups=SUBS.filter(k=>(Number(b[k])||0)-(Number(a[k])||0)>=5);
+    const dns=SUBS.filter(k=>(Number(b[k])||0)-(Number(a[k])||0)<=-5);
+    if(ups.length)trend="지난 회차와 견주면 "+ups.map(k=>"‘"+k+"’").join(", ")+"에서 눈에 띄는 성장이 있었습니다.";
+    else if(dns.length)trend="지난 회차보다 "+dns.map(k=>"‘"+k+"’").join(", ")+"이(가) 내려갔습니다. 최근 학교생활에 변화가 있었는지 살펴봐 주세요.";
+    else trend="지난 회차와 비교하면 전반적으로 비슷한 흐름을 유지하고 있습니다.";
+  }
+  const note=(s.tcNote||"").trim();
+  return {strong,grow,acts,trend,note,hi,lo};
+}
+
+function hAutoAnalysis(s){
+  const a=autoAnalysis(s);
+  if(!a)return "";
+  let o='<div class="card" style="border:1.5px solid #DCD7F5;background:linear-gradient(135deg,#FCFBFF,#FBF7FF)">';
+  o+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:18px">🔎</span>';
+  o+='<div><div class="eyebrow">자동 분석</div>';
+  o+='<div style="font-size:14.5px;font-weight:800;margin-top:3px;letter-spacing:-.02em">진단 결과 해석</div></div></div>';
+  o+='<div style="font-size:11px;color:var(--m);margin:6px 0 14px;line-height:1.6">진단 점수를 바탕으로 자동으로 작성됩니다. 아래 AI 종합의견과 함께 참고하세요.</div>';
+
+  const blk=(icon,title,color,bg,html)=>'<div style="padding:13px 15px;border-radius:13px;background:'+bg+';margin-bottom:9px">'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px"><span style="font-size:13px">'+icon+'</span>'
+    +'<span style="font-size:12.5px;font-weight:800;color:'+color+'">'+title+'</span></div>'
+    +'<div style="font-size:13px;color:var(--t);line-height:1.85">'+html+'</div></div>';
+
+  o+=blk("🌟","빛나는 점","#0B7355","#E8FAF3",hcv(a.strong));
+  o+=blk("🌱","키워갈 점","#B8641F","#FFF6EC",hcv(a.grow));
+  o+=blk("🧭","이렇게 도와주세요","#4A3ED6","#F1EFFF",
+      '<ul style="margin:0;padding-left:17px">'+a.acts.map(x=>'<li style="margin-bottom:5px">'+hcv(x)+'</li>').join("")+'</ul>');
+  if(a.trend)o+=blk("📈","회차 변화","#2E6FD6","#EDF3FF",hcv(a.trend));
+  if(a.note)o+=blk("👀","담임 관찰","#B8641F","#FFFBF2",hcv(a.note));
+  o+='</div>';
+  return o;
+}
+
 function hHiLo(s){
   const r=subScores(s.scores);
   if(!r)return "";
@@ -2330,7 +2418,7 @@ body+='<div class="card" style="padding:13px 15px"><div style="display:flex;just
 +'</div></div>';
 body+=hDiagSummary(s);
 body+=hTeacherNote(s);
-if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
+if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
 else body+='<div class="card" style="text-align:center;padding:20px"><div style="font-size:12px;color:var(--m);margin-bottom:12px">아직 진단 설문이 완료되지 않았어요.</div><button id="btn-start-survey" class="btn-p" style="width:auto;padding:10px 22px;font-size:13px">📋 진단 설문 시작하기</button></div>';
 // 성장 추이 카드
 const hist=s.scoreHistory||[];
@@ -2387,8 +2475,9 @@ body+='<div class="card" style="border:2px solid #EDE8FF;background:linear-gradi
   body+='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--m);margin-bottom:5px">🔑 Anthropic API Key (선택)</div>';
   body+='<div style="display:flex;gap:6px"><input id="api-key-input" type="password" placeholder="sk-ant-... (없으면 직접 작성해요)" style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid var(--b);background:#fff;font-size:11px;outline:none;color:var(--t);font-family:monospace"/>';
   body+='<button id="btn-key-save" style="padding:9px 12px;border-radius:10px;background:var(--p);color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">저장</button></div>';
-  body+='<div id="key-status" style="font-size:10px;margin-top:4px;color:var(--m)">'+(S.apiKey?"✅ API 키 저장됨 — AI 생성 가능해요":"💡 키 없이도 위에서 직접 작성 가능해요")+'</div></div>';
-  body+='<button id="btn-ai-gen" style="width:100%;padding:12px 0;border-radius:12px;border:none;background:linear-gradient(135deg,var(--p),#9B59F5);color:#fff;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(108,99,255,.35)">✨ AI로 초안 자동 생성하기</button>';
+  body+='<div id="key-status" style="font-size:10px;margin-top:4px;color:var(--m)">'+(S.apiKey?"✅ API 키 저장됨 — AI 다듬기까지 가능해요":"💡 키가 없어도 아래 ‘초안 채우기’로 분석문이 만들어져요")+'</div></div>';
+  body+='<button id="btn-auto-fill" style="width:100%;padding:12px 0;border-radius:12px;border:1.5px solid var(--p);background:#fff;color:var(--p);font-size:13px;font-weight:800;cursor:pointer;margin-bottom:8px">📝 진단 결과로 초안 채우기 (키 없이 바로)</button>';
+  body+='<button id="btn-ai-gen" style="width:100%;padding:12px 0;border-radius:12px;border:none;background:var(--p);color:#fff;font-size:13px;font-weight:800;cursor:pointer">✨ AI로 더 다듬기 (API 키 필요)</button>';
   body+='</div>';
 
   // 로딩
@@ -3364,6 +3453,17 @@ function bindEv(){
     const ki=document.getElementById("api-key-input");if(ki)ki.value=S.apiKey||"";
     on("btn-key-save",()=>{const ki2=document.getElementById("api-key-input");const k=ki2?ki2.value.trim():"";S.apiKey=k;localStorage.setItem("union_api_key",k);const st=document.getElementById("key-status");if(st)st.textContent=k?"✅ API 키가 저장됐어요.":"⚠ API 키를 입력해주세요.";});
     onA(".char-opt",e=>{S.neisCh=Number(e.target.dataset.n);document.querySelectorAll(".char-opt").forEach(b=>{const a=Number(b.dataset.n)===S.neisCh;b.style.border="1.5px solid "+(a?"var(--p)":"var(--b)");b.style.background=a?"var(--p)":"var(--s)";b.style.color=a?"#fff":"var(--m)";});});
+    on("btn-auto-fill",()=>{
+      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+      const a=autoAnalysis(stu);
+      if(!a){toast("진단 결과가 있어야 초안을 만들 수 있어요.");return;}
+      const txt=[a.strong,a.grow,(a.trend||""),"앞으로 "+a.acts[0]+"와 같은 활동을 이어가면 좋겠습니다."]
+        .filter(Boolean).join(" ");
+      S.neisText=txt;
+      const ta=document.getElementById("neis-draft");if(ta)ta.value=txt;
+      const rw=document.getElementById("neis-result");if(rw)rw.style.display="block";
+      set({});toast("진단 결과로 초안을 만들었어요. 다듬어서 쓰세요.");
+    });
     on("btn-ai-gen",()=>{const s2=S.students.find(x=>x.id===sid);if(s2)genNeis(s2);});
     const ta=document.getElementById("neis-draft");if(ta){ta.addEventListener("input",()=>{S.neisText=ta.value;updCC();});updCC();}
     on("btn-neis-copy",()=>{const ta2=document.getElementById("neis-draft");const t=ta2?ta2.value:"";navigator.clipboard.writeText(t).then(()=>toast("복사됐어요.")).catch(()=>toast("직접 선택해서 복사해주세요."));});
