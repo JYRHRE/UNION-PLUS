@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-12"/>
+<meta name="app-version" content="2026-08-23-13"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-12";
+const APP_VERSION = "2026-08-23-13";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1202,6 +1202,7 @@ async function dbLoadStudents(retry){
       teacher:r.teacher||"", at:r.at||td(),
       country:r.country||"대한민국", stype:r.stype||"일반학생",
       tcNote:r.tc_note||"", tcNoteAt:r.tc_note_at||"", teamFb:r.team_fb||null,
+      caseNote:r.case_note||"", caseNoteAt:r.case_note_at||"",
       scores:r.scores||null,
       scoreHistory:r.score_history||[],
       logs:r.logs||[],
@@ -1243,6 +1244,8 @@ async function dbSaveStudent(s){
       stype:String(s.stype||"일반학생"),
       tc_note:String(s.tcNote||""),
       tc_note_at:String(s.tcNoteAt||""),
+      case_note:String(s.caseNote||""),
+      case_note_at:String(s.caseNoteAt||""),
       team_fb:s.teamFb||null,
       at:String(s.at||td()),
       scores:s.scores||null,
@@ -1754,6 +1757,119 @@ function hHiLo(s){
   return o;
 }
 
+function buildCase(s){
+  const hist=(s.scoreHistory||[]).filter(r=>r&&r.scores);
+  if(hist.length<2)return null;
+  const first=subScores(hist[0].scores)||{};
+  const last=subScores(hist[hist.length-1].scores)||{};
+  const sups=s.supports||[];
+
+  const items=SUBS.map(k=>{
+    const b=Number(first[k])||0, a=Number(last[k])||0;
+    return {area:k, before:b, after:a, delta:a-b,
+            need:b<60,                       // 1회차에 지원이 필요했던 영역인가
+            sups:sups.filter(x=>x.dom===k)};
+  });
+  // 지원했거나 60점 미만이었던 영역이 사례의 뼈대다
+  const focus=items.filter(x=>x.sups.length||x.need);
+  return {
+    first:hist[0], last:hist[hist.length-1], rounds:hist.length,
+    items, focus,
+    supported:items.filter(x=>x.sups.length),
+    totalBefore:totSc(hist[0].scores), totalAfter:totSc(hist[hist.length-1].scores)
+  };
+}
+
+function hCaseReport(s){
+  const c=buildCase(s);
+  let o='<div class="card" style="border:1.5px solid #CFE8DC;background:linear-gradient(135deg,#FAFFFD,#F5FBFF)">';
+  o+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">';
+  o+='<div><div class="eyebrow">사례</div>';
+  o+='<div style="font-size:14.5px;font-weight:800;margin-top:3px;letter-spacing:-.02em">진단 → 지원 → 변화</div>';
+  o+='<div style="font-size:11.5px;color:var(--m);margin-top:4px;line-height:1.65">이 학생에게 무엇이 필요했고, 무엇을 했고, 어떻게 달라졌는지 한 흐름으로 정리합니다.</div></div>';
+  o+='<button id="btn-case-print" class="no-print" style="padding:8px 14px;border-radius:10px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">인쇄</button></div>';
+
+  if(!c){
+    o+='<div style="margin-top:13px;padding:14px;border-radius:12px;background:var(--bg);font-size:12px;color:var(--m);line-height:1.75">';
+    o+='진단이 <strong>2회 이상</strong> 쌓이면 변화를 보여드릴 수 있어요.<br>1회차 진단 → 지원 프로그램 기록 → 2회차 재진단 순서로 진행해 주세요.</div></div>';
+    return o;
+  }
+
+  const dt=c.totalAfter-c.totalBefore;
+  o+='<div style="display:flex;gap:9px;flex-wrap:wrap;margin:14px 0 4px">';
+  [["1회차",c.first.date,c.totalBefore],["최근("+c.rounds+"회차)",c.last.date,c.totalAfter]].forEach(([lb,dd,v])=>{
+    o+='<div style="flex:1;min-width:118px;padding:11px 13px;border-radius:12px;background:var(--s);border:1px solid var(--b)">';
+    o+='<div style="font-size:10px;color:var(--m);font-weight:700">'+lb+'</div>';
+    o+='<div style="font-size:22px;font-weight:900;color:var(--t);line-height:1.15;margin-top:2px">'+v+'</div>';
+    o+='<div style="font-size:10px;color:var(--m);margin-top:2px">'+hcv(dd||"-")+'</div></div>';
+  });
+  o+='<div style="flex:1;min-width:118px;padding:11px 13px;border-radius:12px;background:'+(dt>=0?"#E8FAF3":"#FFF0F3")+'">';
+  o+='<div style="font-size:10px;font-weight:700;color:'+(dt>=0?"#0B7355":"#C2334C")+'">전체 변화</div>';
+  o+='<div style="font-size:22px;font-weight:900;color:'+(dt>=0?"#12A47C":"#E23D63")+';line-height:1.15;margin-top:2px">'+(dt>0?"+":"")+dt+'</div>';
+  o+='<div style="font-size:10px;color:'+(dt>=0?"#0B7355":"#C2334C")+';margin-top:2px">'+(dt>0?"올랐어요":dt<0?"내려갔어요":"유지")+'</div></div>';
+  o+='</div>';
+
+  if(!c.focus.length){
+    o+='<div style="margin-top:12px;padding:13px;border-radius:12px;background:var(--bg);font-size:12px;color:var(--m);line-height:1.75">';
+    o+='1회차에 60점 미만인 영역이 없었고 등록된 지원도 없어요. 지원 프로그램을 기록하면 여기에 사례로 정리됩니다.</div></div>';
+    return o;
+  }
+
+  o+='<div style="margin-top:14px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+  o+='<tr style="background:var(--bg)">';
+  ['영역','진단(1회차)','판단','지원한 것','진단(최근)','변화'].forEach((t,i)=>{
+    o+='<th style="padding:9px 8px;font-weight:700;color:var(--m);text-align:'+(i===3?"left":"center")+';white-space:nowrap'
+     +(i===0?';border-radius:8px 0 0 8px':'')+(i===5?';border-radius:0 8px 8px 0':'')+'">'+t+'</th>';});
+  o+='</tr>';
+
+  c.focus.forEach(x=>{
+    o+='<tr style="border-bottom:1px solid var(--b)">';
+    o+='<td style="padding:11px 8px;font-weight:800;color:'+SUBM[x.area].c+';line-height:1.35">'+hcv(x.area)+'</td>';
+    o+='<td style="padding:11px 8px;text-align:center;font-weight:800;color:'+(x.before<60?"#E23D63":"var(--t)")+'">'+x.before+'</td>';
+    o+='<td style="padding:11px 8px;text-align:center;white-space:nowrap"><span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'
+      +(x.need?"#FFF0F3;color:#C2334C":"var(--bg);color:var(--m)")+'">'+(x.need?"지원 필요":"경과 관찰")+'</span></td>';
+    o+='<td style="padding:11px 8px;line-height:1.6">';
+    if(x.sups.length){
+      x.sups.forEach(p=>{
+        o+='<div style="margin-bottom:4px"><span style="font-weight:700">'+hcv(p.prog)+'</span>';
+        o+='<span style="color:var(--m);font-size:11px"> · '+hcv(p.start)+' 시작 · '+(p.sessions||0)+'회기 · '+hcv(p.status)+'</span>';
+        if(p.memo)o+='<div style="font-size:10.5px;color:var(--m);margin-top:2px">'+hcv(p.memo)+'</div>';
+        o+='</div>';
+      });
+    }else o+='<span style="color:var(--m)">기록된 지원 없음</span>';
+    o+='</td>';
+    o+='<td style="padding:11px 8px;text-align:center;font-weight:800;color:'+(x.after<60?"#E23D63":"var(--t)")+'">'+x.after+'</td>';
+    const c2=x.delta>0?"#12A47C":x.delta<0?"#E23D63":"#8B87A6";
+    o+='<td style="padding:11px 8px;text-align:center;font-weight:900;color:'+c2+';white-space:nowrap">'+(x.delta>0?"▲":x.delta<0?"▼":"—")+(x.delta!==0?Math.abs(x.delta):"")+'</td>';
+    o+='</tr>';
+  });
+  o+='</table></div>';
+
+  // 지원한 영역이 실제로 올랐는지 한 줄로
+  const sup=c.supported;
+  if(sup.length){
+    const up=sup.filter(x=>x.delta>0);
+    o+='<div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:'+(up.length?"#E8FAF3":"var(--bg)")+';font-size:12px;line-height:1.75;color:'+(up.length?"#0B7355":"var(--m)")+'">';
+    if(up.length)o+='지원한 '+sup.length+'개 영역 중 <strong>'+up.length+'개</strong>에서 점수가 올랐습니다'
+      +(up.length?(' ('+up.map(x=>SUBM[x.area].s+" +"+x.delta).join(", ")+')'):'')+'.';
+    else o+='지원한 영역에서 아직 뚜렷한 변화가 보이지 않습니다. 지원 방식이나 기간을 살펴봐 주세요.';
+    o+='</div>';
+  }
+
+  // 교사 해석 — 숫자만으로는 사례가 되지 않는다
+  o+='<div style="margin-top:12px">';
+  o+='<div style="font-size:12px;font-weight:800;margin-bottom:6px">교사 해석</div>';
+  o+='<div style="font-size:11px;color:var(--m);margin-bottom:8px;line-height:1.65">점수 변화의 배경, 교실에서 관찰한 장면, 앞으로의 계획을 적어주세요. 보고서에 그대로 쓰입니다.</div>';
+  o+='<textarea id="case-note" rows="4" placeholder="예) 1학기에는 모둠 활동에서 늘 뒤로 물러서 있었으나, 한국어학급 연계 후 짝 활동에서 먼저 말을 거는 모습이 보이기 시작함. 2학기에는 발표 기회를 늘려갈 계획." style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b);background:#fff;font-size:13px;color:var(--t);outline:none;resize:vertical;line-height:1.85;font-family:inherit">'+hcv(s.caseNote||"")+'</textarea>';
+  o+='<div style="display:flex;gap:7px;margin-top:8px;align-items:center">';
+  o+='<span style="flex:1;font-size:11px;color:var(--m)">'+(s.caseNoteAt?("마지막 저장 "+hcv(s.caseNoteAt)):"아직 저장된 해석이 없어요")+'</span>';
+  o+='<button id="btn-case-save" class="no-print" style="padding:9px 18px;border-radius:10px;border:none;background:#12A47C;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">해석 저장</button></div>';
+  o+='</div>';
+
+  o+='</div>';
+  return o;
+}
+
 function hTeacherNote(s){
   let o='<div class="card" style="border:2px solid #FFE8D6;background:linear-gradient(135deg,#FFFBF7,#FFF7FB)">';
   o+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:5px"><span style="font-size:20px">👀</span>';
@@ -1884,6 +2000,58 @@ function hSupportStat(list){
   SUP_ST.forEach(st=>{const n=all.filter(x=>x.status===st).length;
     o+='<span style="font-size:11.5px;font-weight:700;padding:6px 13px;border-radius:20px;background:'+(SUP_ST_C[st]||"#8A8FA3")+'1F;color:'+(SUP_ST_C[st]||"#8A8FA3")+'">'+st+' '+n+'건</span>';});
   o+='</div></div>';return o;
+}
+
+// 보고서에 넣을 사례 후보를 추려준다.
+// 30명을 하나씩 열어보며 찾는 일을 대신한다.
+function hCaseCandidates(list){
+  const cand=[];
+  list.forEach(s=>{
+    const c=buildCase(s);
+    if(!c)return;
+    const sup=c.supported;
+    if(!sup.length)return;                       // 지원 기록이 있어야 사례가 된다
+    const up=sup.filter(x=>x.delta>0);
+    const gain=sup.reduce((a,x)=>a+x.delta,0);
+    cand.push({s,c,sup,up,gain,
+      // 지원한 영역이 실제로 올랐는지 + 총점 변화 + 교사 해석 유무
+      score:(up.length*10)+gain+((s.caseNote||"").trim()?5:0)});
+  });
+  cand.sort((a,b)=>b.score-a.score);
+
+  let o='<div class="card" style="margin-top:16px">';
+  o+='<div class="eyebrow">보고서 준비</div>';
+  o+='<div style="font-size:14.5px;font-weight:800;margin-top:3px;letter-spacing:-.02em">사례로 쓸 만한 학생</div>';
+  o+='<div style="font-size:11.5px;color:var(--m);margin-top:5px;margin-bottom:13px;line-height:1.7">2회 이상 진단하고 지원 기록이 있는 학생 중, 지원한 영역이 실제로 오른 순서예요.</div>';
+
+  if(!cand.length){
+    o+='<div style="padding:14px;border-radius:12px;background:var(--bg);font-size:12px;color:var(--m);line-height:1.8">';
+    o+='아직 사례로 쓸 학생이 없어요. 아래 세 가지가 갖춰지면 자동으로 나타납니다.<br>';
+    o+='① 1회차 진단 &nbsp;②&nbsp;지원 프로그램 기록 &nbsp;③&nbsp;2회차 재진단</div></div>';
+    return o;
+  }
+
+  cand.slice(0,5).forEach(x=>{
+    const dt=x.c.totalAfter-x.c.totalBefore;
+    o+='<div class="casecd" data-id="'+x.s.id+'" style="padding:13px 15px;border-radius:13px;border:1px solid var(--b);background:var(--s);margin-bottom:9px;cursor:pointer">';
+    o+='<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px">';
+    o+='<span style="font-size:14px;font-weight:800">'+hcv(x.s.name)+'</span>';
+    o+='<span style="font-size:10.5px;color:var(--m)">'+x.s.grade+'-'+x.s.cls+'</span>';
+    o+='<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;background:'+(dt>=0?"#E8FAF3;color:#0B7355":"#FFF0F3;color:#C2334C")+'">총점 '+(dt>0?"+":"")+dt+'</span>';
+    if((x.s.caseNote||"").trim())o+='<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;background:var(--pl);color:var(--p)">해석 작성됨</span>';
+    o+='<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--p)">사례 보기 →</span></div>';
+    o+='<div style="display:flex;flex-direction:column;gap:4px">';
+    x.sup.forEach(a=>{
+      const cc=a.delta>0?"#12A47C":a.delta<0?"#E23D63":"#8B87A6";
+      o+='<div style="font-size:11.5px;line-height:1.6"><span style="font-weight:700;color:'+SUBM[a.area].c+'">'+hcv(a.area)+'</span>';
+      o+='<span style="color:var(--m)"> · '+hcv(a.sups[0].prog)+(a.sups.length>1?(" 외 "+(a.sups.length-1)):"")+' → </span>';
+      o+='<span style="font-weight:800;color:'+cc+'">'+a.before+'→'+a.after+' ('+(a.delta>0?"+":"")+a.delta+')</span></div>';
+    });
+    o+='</div></div>';
+  });
+  if(cand.length>5)o+='<div style="font-size:11px;color:var(--m);text-align:center;margin-top:6px">외 '+(cand.length-5)+'명</div>';
+  o+='</div>';
+  return o;
 }
 
 function hRosterFilter(){
@@ -2770,6 +2938,7 @@ function pgSchoolView(){
   const gRows=GRADES.map(g=>({lb:g+"학년",v:sl.filter(s=>s.grade===g).length,c:"#22C79A"})).filter(r=>r.v>0);
   body+=hStatBar("학년별 누적 인원",gRows,sl.length,"학교 전체");
 
+  body+=hCaseCandidates(flt);
   body+=hSupportStat(flt);
   body+=hFreq(flt,label+" 점수 분포");
   body+='</div></div>';
@@ -2807,6 +2976,7 @@ if(hist.length>=1){
 }
   body+=hRawAnswers(s);
   body+=hSupportPanel(s,S.programs||defPrograms());
+  body+=hCaseReport(s);
   body+=hTeamPanel(s);
   const _extN=(s.logs||[]).filter(l=>EXT_ORGS.some(o=>String(l.author||"").indexOf(o)===0)).length;
   body+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px"><div style="font-size:13px;font-weight:700">교사 협업 기록장</div>'
@@ -3631,6 +3801,11 @@ function bindEv(){
   });
   onA(".nav-btn",e=>set({menu:e.currentTarget.dataset.menu,sid:null}));
   onA(".sf",e=>set({schoolFilter:e.target.dataset.key}));
+  onA(".casecd",e=>{
+    const el=e.currentTarget.closest("[data-id]");if(!el)return;
+    set({sid:el.dataset.id,menu:"detail",lAuth:S.tcIsSpecial?"전담교사":"담임교사",
+         lTags:[],lMemo:"",neisText:"",supOpen:false,supDom:SUBS[0],roundTab:null,teamOpen:false,rawOpen:false});
+  });
   on("btn-go-db",()=>set({menu:"admin"}));
 
   // ── 로그인 ──
@@ -3955,6 +4130,16 @@ function bindEv(){
       const stu0=S.students.find(x=>x.id===sid);
       if(stu0&&stu0.scores)setTimeout(()=>autoNeis(stu0,false),150);
     }
+    on("btn-case-save",()=>{
+      const el=document.getElementById("case-note");if(!el)return;
+      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+      const us={...stu,caseNote:el.value.trim(),caseNoteAt:td()};
+      set({students:S.students.map(x=>x.id===sid?us:x)});
+      saveSt(S.students);
+      dbSaveStudent(us);
+      toast("교사 해석을 저장했어요.");
+    });
+    on("btn-case-print",()=>{ setTimeout(()=>window.print(),80); });
     on("btn-neis-regen",()=>{
       const stu0=S.students.find(x=>x.id===sid);
       if(!stu0)return;
