@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-02"/>
+<meta name="app-version" content="2026-08-23-03"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-02";
+const APP_VERSION = "2026-08-23-03";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1844,16 +1844,29 @@ function hDiagSummary(s){
   o+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   o+='<tr style="background:var(--bg)"><th style="padding:9px 8px;text-align:left;font-weight:700;color:var(--m);border-radius:8px 0 0 8px">회차</th><th style="padding:9px 8px;font-weight:700;color:var(--m)">총점</th>';
   SUBS.forEach(k=>{o+='<th style="padding:9px 6px;font-weight:700;color:'+SUBM[k].c+';white-space:nowrap">'+SUBM[k].s+'</th>';});
-  o+='<th style="padding:9px 8px;font-weight:700;color:var(--m);border-radius:0 8px 8px 0">분석완료일</th></tr>';
+  o+='<th style="padding:9px 8px;font-weight:700;color:var(--m)">분석완료일</th>';
+  o+='<th class="no-print" style="padding:9px 8px;font-weight:700;color:var(--m);border-radius:0 8px 8px 0;width:52px">삭제</th></tr>';
   rows.forEach((r,i)=>{
     const t=totSc(r.scores),prev=i>0?totSc(rows[i-1].scores):null,dt=prev===null?null:t-prev;
     o+='<tr style="border-bottom:1px solid var(--b)"><td style="padding:11px 8px;font-weight:800">'+(i+1)+'회차</td>';
     o+='<td style="padding:11px 8px;text-align:center;font-weight:900;color:var(--p);font-size:15px">'+t+(dt!==null?'<span style="font-size:10px;font-weight:700;color:'+(dt>=0?"#22C79A":"#E8445A")+';margin-left:4px">'+(dt>=0?"▲":"▼")+Math.abs(dt)+'</span>':"")+'</td>';
     const sr=subScores(r.scores)||{};
     SUBS.forEach(k=>{const v=Number(sr[k])||0;o+='<td style="padding:11px 6px;text-align:center;font-weight:700;color:'+(v<60?"#E8445A":"var(--t)")+'">'+v+'</td>';});
-    o+='<td style="padding:11px 8px;text-align:center;color:var(--m);font-weight:600">'+hcv(r.date||"-")+'</td></tr>';
+    o+='<td style="padding:11px 8px;text-align:center;color:var(--m);font-weight:600">'+hcv(r.date||"-")+'</td>';
+    o+='<td class="no-print" style="padding:11px 6px;text-align:center"><button class="rd-del" data-i="'+i+'" title="'+(i+1)+'회차 삭제" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">삭제</button></td></tr>';
   });
-  o+='</table></div></div>';
+  o+='</table></div>';
+  // 같은 날 같은 점수가 반복되면 실수로 여러 번 제출된 것이다
+  const dupN=(()=>{const seen=new Set();let n=0;
+    rows.forEach(r=>{const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
+      if(seen.has(key))n++;else seen.add(key);});return n;})();
+  if(dupN>0){
+    o+='<div class="no-print" style="margin-top:12px;padding:12px 14px;border-radius:12px;background:#FFF6E5;border:1px solid #F5D48A">';
+    o+='<div style="font-size:12px;font-weight:800;color:#B8791A;margin-bottom:5px">같은 내용이 '+dupN+'번 더 들어와 있어요</div>';
+    o+='<div style="font-size:11.5px;color:#8A6414;line-height:1.65;margin-bottom:10px">제출 버튼이 여러 번 눌렸을 때 생깁니다. 처음 1건만 남기고 정리할 수 있어요.</div>';
+    o+='<button id="btn-dedup" style="padding:9px 16px;border-radius:10px;border:none;background:#F5A623;color:#fff;font-size:12px;font-weight:800;cursor:pointer">중복 '+dupN+'건 정리하기</button></div>';
+  }
+  o+='</div>';
   return o;
 }
 
@@ -3230,10 +3243,39 @@ function render(){
     else if(menu==="ext_classView") h=pgExtClassView();
     else if(menu==="ext_detail")    h=pgExtDetail();
   }
-  if(msg)h+='<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1A1835;color:#fff;padding:10px 18px;border-radius:9px;font-size:12px;font-weight:600;box-shadow:0 5px 20px #0006;z-index:999;white-space:nowrap">'+msg+'</div>';
+  if(msg)h+='<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1A1835;color:#fff;padding:10px 18px;border-radius:9px;font-size:12px;font-weight:600;box-shadow:0 5px 20px #0006;z-index:999;max-width:90vw;line-height:1.5;text-align:center">'+msg+'</div>';
   document.getElementById("app").innerHTML=h;
   bindEv();
 }
+
+// 화면을 그리다 오류가 나면 아무 반응 없이 멈춰 보인다.
+// 무엇이 잘못됐는지 보여주고 빠져나갈 길을 남긴다.
+const _render=render;
+render=function(){
+  try{ _render(); }
+  catch(err){
+    console.error("[UNION+] 화면 오류:", err);
+    const app=document.getElementById("app");
+    if(!app)return;
+    app.innerHTML=
+      '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#F6F5FA">'
+      +'<div style="max-width:420px;width:100%;background:#fff;border:1px solid #E6E3F0;border-radius:18px;padding:24px;'
+      +'font-family:\'Pretendard Variable\',Pretendard,\'Noto Sans KR\',sans-serif">'
+      +'<div style="font-size:17px;font-weight:800;color:#1B1830">화면을 여는 중 문제가 생겼어요</div>'
+      +'<div style="font-size:12.5px;color:#7E7A99;margin-top:9px;line-height:1.75">입력하신 내용은 저장돼 있습니다. '
+      +'아래 버튼으로 처음 화면으로 돌아가 주세요.</div>'
+      +'<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:#F6F5FA;font-size:11px;'
+      +'color:#7E7A99;word-break:break-all;line-height:1.6">'+String(err&&err.message||err)+'</div>'
+      +'<button id="err-home" style="width:100%;margin-top:14px;padding:12px 0;border-radius:12px;border:none;'
+      +'background:#5B4EE8;color:#fff;font-size:14px;font-weight:800;cursor:pointer">처음 화면으로</button></div></div>';
+    const b=document.getElementById("err-home");
+    if(b)b.addEventListener("click",()=>{
+      S.menu="survey";S.sid=null;
+      if(S.page==="student")S.page="login";
+      try{ _render(); }catch(e){ location.reload(); }
+    });
+  }
+};
 
 // ══════════════════════════════════════════════════════════
 // 이벤트 바인딩
@@ -3514,6 +3556,40 @@ function bindEv(){
     onA(".coachpick",e=>set({coachSel:e.currentTarget.dataset.c}));
     on("btn-go-coach",()=>set({menu:"admin"}));
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
+    // ── 회차 삭제 ──
+    const saveStu=(us)=>{
+      set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
+      dbSaveStudent(us);
+    };
+    onA(".rd-del",e=>{
+      const idx=Number(e.currentTarget.dataset.i);
+      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+      const hist=(stu.scoreHistory&&stu.scoreHistory.length)?stu.scoreHistory:(stu.scores?[{date:stu.at,scores:stu.scores}]:[]);
+      if(!hist[idx])return;
+      showDelModal("…"+(idx+1)+"회차 진단 기록을 삭제할까요?", ()=>{
+        const left=hist.filter((_,i)=>i!==idx);
+        const us={...stu, scoreHistory:left,
+          scores: left.length?left[left.length-1].scores:null};
+        saveStu(us);
+        toast((idx+1)+"회차를 삭제했어요.");
+      });
+    });
+    on("btn-dedup",()=>{
+      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+      const hist=stu.scoreHistory||[];
+      showDelModal("…같은 내용으로 중복된 회차를 정리할까요? 처음 1건만 남습니다.", ()=>{
+        const seen=new Set(), left=[];
+        hist.forEach(r=>{
+          const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
+          if(!seen.has(key)){seen.add(key);left.push(r);}
+        });
+        const removed=hist.length-left.length;
+        const us={...stu, scoreHistory:left,
+          scores: left.length?left[left.length-1].scores:null};
+        saveStu(us);
+        toast(removed+"건을 정리했어요. "+left.length+"회차가 남았어요.");
+      });
+    });
     on("btn-raw-toggle",()=>set({rawOpen:!S.rawOpen,rawTab:null}));
     onA(".rawtab",e=>set({rawTab:Number(e.currentTarget.dataset.k)}));
     // ── 지원 프로그램 현황 ──
@@ -3603,6 +3679,9 @@ function bindEv(){
         set({sQ:firstIdx});
         return;
       }
+      if(S._submitting)return;          // 연타 방지
+      S._submitting=true;
+      setTimeout(()=>{S._submitting=false;},2500);
       const fd=S.focusDoms;
       const part=calcSc(ans,s.grade,S.surveyLang||"ko",fd);
       const scores=rollup((fd&&fd.length)?{...(s.scores||{}),...part}:part);
@@ -3611,7 +3690,10 @@ function bindEv(){
       const updatedStudents=S.students.map(x=>{
         if(x.id!==sid)return x;
         const hist=x.scoreHistory||[];
-        return{...x,scores,scoreHistory:[...hist,newEntry]};
+        // 같은 날 같은 결과가 이미 있으면 새 회차를 만들지 않는다
+        const key=v=>(v.date||"")+"|"+SUBS.map(k=>(subScores(v.scores)||{})[k]).join(",");
+        const dup=hist.length&&key(hist[hist.length-1])===key(newEntry);
+        return{...x,scores,scoreHistory:dup?hist:[...hist,newEntry]};
       });
       const doneStu=updatedStudents.find(x=>x.id===sid);
       if(doneStu){dbSaveStudent(doneStu).then(r=>{
@@ -3905,7 +3987,7 @@ function bindEv(){
 }
 
 // ── 삭제 비밀번호 모달 ─────────────────────────────
-const DEL_PW = "1234teacher";
+const DEL_PW = "1234";
 let _delCallback = null;
 
 function showDelModal(studentName, onConfirm){
@@ -3914,7 +3996,10 @@ function showDelModal(studentName, onConfirm){
   const pwEl = document.getElementById("del-pw-input");
   const errEl = document.getElementById("del-pw-err");
   if(!modal) return;
-  nameEl.textContent = studentName + " 학생을 정말 삭제할까요?";
+  // "…" 로 시작하면 문장을 그대로 쓴다 (회차 삭제 등)
+  nameEl.textContent = String(studentName).indexOf("…")===0
+    ? String(studentName).slice(1)
+    : studentName + " 학생을 정말 삭제할까요?";
   pwEl.value = "";
   errEl.textContent = "";
   _delCallback = onConfirm;
