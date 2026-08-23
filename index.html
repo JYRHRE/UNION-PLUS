@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-22-01"/>
+<meta name="app-version" content="2026-08-22-02"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-22-01";
+const APP_VERSION = "2026-08-22-02";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1111,13 +1111,64 @@ async function dbSaveStudent(s){
     if(!res.ok){
       const errText = await res.text().catch(()=>"");
       console.warn("[UNION+] 학생 저장 실패:", res.status, errText);
+      // 왜 막혔는지 사람이 읽을 수 있게 남겨둔다
+      if(res.status===401||res.status===403)
+        S._saveErr="서버가 저장을 거부했어요. 보안잠금 SQL(3번)의 student_insert·student_update 정책이 있는지 확인해 주세요.";
+      else if(/PGRST204|column/i.test(errText))
+        S._saveErr="표에 없는 항목이 있어요. 설치 SQL(1번)을 한 번 더 실행해 컬럼을 맞춰주세요.";
+      else if(res.status===404)
+        S._saveErr="students 표를 찾지 못했어요. 설치 SQL(1번)을 실행해 주세요.";
+      else S._saveErr="서버 응답 "+res.status+" — 잠시 후 자동으로 다시 보냅니다.";
+      queuePending(s);
       return false;
     }
+    S._saveErr="";
     return true;
   } catch(e){
     console.warn("[UNION+] 학생 저장 중 네트워크 오류:", e && e.message);
+    S._saveErr="네트워크가 끊겨 전송하지 못했어요. 연결되면 자동으로 다시 보냅니다.";
+    queuePending(s);
     return false;
   }
+}
+
+// ── 못 보낸 결과는 이 기기에 모아두고 다시 시도한다 ──────
+// 아이 설문은 다시 받을 수 없으니 절대 버리면 안 된다.
+const PENDING_KEY="union_pending_v1";
+function loadPending(){ try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"[]");}catch(e){return [];} }
+function savePending(a){ try{localStorage.setItem(PENDING_KEY,JSON.stringify(a));}catch(e){} }
+function queuePending(s){
+  if(!s||!s.id)return;
+  const a=loadPending().filter(x=>x.id!==s.id);
+  a.push(s); savePending(a.slice(-100));
+}
+async function flushPending(){
+  if(!USE_DB())return {sent:0,left:0};
+  const a=loadPending();
+  if(!a.length)return {sent:0,left:0};
+  const left=[];let sent=0;
+  for(const s of a){
+    let okk=false;
+    try{
+      const res=await fetch(SB_URL+"/rest/v1/students",{
+        method:"POST",
+        headers:authHeaders({"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"}),
+        body:JSON.stringify({
+          id:String(s.id),name:String(s.name||""),grade:Number(s.grade)||1,cls:Number(s.cls)||1,
+          teacher:String(s.teacher||""),country:String(s.country||"대한민국"),stype:String(s.stype||"일반학생"),
+          tc_note:String(s.tcNote||""),tc_note_at:String(s.tcNoteAt||""),team_fb:s.teamFb||null,
+          at:String(s.at||td()),scores:s.scores||null,
+          score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
+          logs:Array.isArray(s.logs)?s.logs:[],supports:Array.isArray(s.supports)?s.supports:[],
+          updated_at:new Date().toISOString()})
+      });
+      okk=res.ok;
+    }catch(e){ okk=false; }
+    okk?sent++:left.push(s);
+  }
+  savePending(left);
+  if(sent&&!left.length)S._saveErr="";
+  return {sent,left:left.length};
 }
 
 async function dbDeleteStudent(id){
@@ -1188,6 +1239,7 @@ async function syncFromDB(){
   if(!USE_DB()||!SB_URL||!SB_KEY) return;
   try{
     S._syncing=true;
+    await flushPending().catch(()=>{});   // 못 보낸 결과부터 밀어 넣는다
     const [sts, nts, res] = await Promise.all([dbLoadStudents(), dbLoadNotices(), dbLoadResources()]);
     if(sts !== null){ S.students = sts; saveSt(sts); }
     if(nts !== null){ S.notices = nts; saveNotices(nts); }
@@ -2632,7 +2684,7 @@ function pgSurvey(){
 
     // 완료 축하 배너
     if(isLast&&sel!=null){
-      body+='<div style="background:linear-gradient(135deg,#FF9F51,#FF6B9D,#B97AFF);border-radius:24px;padding:18px 22px;margin-top:16px;display:flex;align-items:center;gap:14px;box-shadow:0 8px 24px rgba(255,107,157,.3);animation:pop .4s ease"><span style="font-size:36px" class="wiggle">🎊</span><div><div style="font-size:16px;font-weight:900;color:#fff">모두 다 했어요! 🥳</div><div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:3px">결과 확인 버튼을 눌러보세요!</div></div></div>';
+      body+='<div style="background:linear-gradient(135deg,#FF9F51,#FF6B9D,#B97AFF);border-radius:24px;padding:18px 22px;margin-top:16px;display:flex;align-items:center;gap:14px;box-shadow:0 8px 24px rgba(255,107,157,.3);animation:pop .4s ease"><span style="font-size:36px" class="wiggle">🎊</span><div><div style="font-size:16px;font-weight:900;color:#fff">모두 다 했어요! 🥳</div><div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:3px">아래 제출하기를 누르면 끝나요</div></div></div>';
     }
 
     // 하단 고정 버튼
@@ -2640,7 +2692,7 @@ function pgSurvey(){
     body+='<div style="position:fixed;bottom:0;left:0;right:0;padding:14px 20px 20px;background:rgba(255,255,255,.97);backdrop-filter:blur(12px);border-top:2px solid #EDE9FF;display:flex;gap:10px;z-index:20;box-shadow:0 -4px 20px rgba(92,78,232,.08)">';
     body+='<button id="btn-prev" style="width:54px;height:54px;border-radius:18px;border:2.5px solid #EDE8FF;background:#fff;color:'+(cq===0?"#ccc":"#6C63FF")+';font-size:22px;cursor:pointer;flex-shrink:0;opacity:'+(cq===0?.35:1)+';box-shadow:0 4px 12px rgba(0,0,0,.07);transition:all .18s">←</button>';
     if(isLast){
-      body+='<button id="btn-submit" style="flex:1;height:54px;border-radius:50px;border:none;font-size:16px;font-weight:900;cursor:pointer;background:'+(allDone?'linear-gradient(135deg,#FFD166,#FF8FAB,#C77DFF)':'#EDE9FF')+';color:'+(allDone?'#fff':'#B8B0D0')+';transition:all .25s;'+(allDone?'box-shadow:0 5px 18px rgba(199,125,255,.5);animation:pop 1.5s ease-in-out infinite':'')+';letter-spacing:-.3px">'+(allDone?"✨ 결과 확인하기":"아직 답하지 않은 문제가 있어요")+'</button>';
+      body+='<button id="btn-submit" style="flex:1;height:54px;border-radius:50px;border:none;font-size:16px;font-weight:900;cursor:pointer;background:'+(allDone?'linear-gradient(135deg,#FFD166,#FF8FAB,#C77DFF)':'#EDE9FF')+';color:'+(allDone?'#fff':'#B8B0D0')+';transition:all .25s;'+(allDone?'box-shadow:0 5px 18px rgba(199,125,255,.5);animation:pop 1.5s ease-in-out infinite':'')+';letter-spacing:-.3px">'+(allDone?"제출하기 ✨":"아직 답하지 않은 문제가 있어요")+'</button>';
     } else {
       body+='<button id="btn-next" style="flex:1;height:54px;border-radius:18px;border:none;font-size:16px;font-weight:900;cursor:pointer;background:'+(sel!=null?"linear-gradient(135deg,#FF9F51,#FF6B9D,#B97AFF)":"#EDE8FF")+';background-size:200%;color:'+(sel!=null?"#fff":"#b0a8d8")+';transition:all .2s;'+(sel!=null?"box-shadow:0 6px 18px rgba(255,107,157,.4);animation:shimmer 3s linear infinite":"")+';letter-spacing:-.3px">다음으로 →</button>';
     }
@@ -2848,6 +2900,19 @@ function pgAdmin(){
     body += '<input id="pw-new2" type="password" placeholder="새 비밀번호 확인" style="padding:11px 14px;border-radius:12px;border:1.5px solid var(--b);font-size:14px;outline:none;color:var(--t);background:var(--bg)"/>';
     if(S.pwChange&&S.pwChange.msg)body+='<div style="font-size:12px;color:'+(S.pwChange.ok?"var(--g)":"var(--d)")+';font-weight:600">'+S.pwChange.msg+'</div>';
     body += '<button id="btn-pw-change" class="btn-p">비밀번호 변경</button></div></div>';
+
+    // ── 전송 대기 ──
+    {
+      const pend=loadPending();
+      if(pend.length||S._saveErr){
+        body += '<div class="card" style="border:1.5px solid #F5D48A;background:#FFFBF0">';
+        body += '<div style="font-size:13px;font-weight:800;color:#B8791A;margin-bottom:6px">전송하지 못한 결과 '+pend.length+'건</div>';
+        if(S._saveErr)body += '<div style="font-size:12px;color:#8A6414;line-height:1.7;margin-bottom:10px">'+hcv(S._saveErr)+'</div>';
+        body += '<div style="font-size:11.5px;color:#8A6414;line-height:1.65;margin-bottom:11px">결과는 이 기기에 보관돼 있어요. 원인을 해결한 뒤 아래 버튼을 누르면 서버로 올라갑니다.</div>';
+        if(pend.length)body += '<div style="font-size:11px;color:#8A6414;margin-bottom:11px">'+hcv(pend.slice(0,6).map(x=>x.name).join(", "))+(pend.length>6?" 외 "+(pend.length-6)+"명":"")+'</div>';
+        body += '<button id="btn-flush" style="padding:10px 18px;border-radius:11px;border:none;background:#F5A623;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">지금 다시 보내기</button></div>';
+      }
+    }
 
     // ── 내 정보 ──
     body += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">';
@@ -3514,12 +3579,12 @@ function bindEv(){
       });
       const doneStu=updatedStudents.find(x=>x.id===sid);
       if(doneStu){dbSaveStudent(doneStu).then(r=>{
-        if(USE_DB()&&r===false)toast("결과는 이 기기에 저장됐지만 서버 전송에 실패했어요. 관리자 화면에서 다시 시도해 주세요.");
+        if(USE_DB()&&r===false)toast("답안은 안전하게 보관했어요. 인터넷이 연결되면 자동으로 선생님께 전달됩니다.");
       }).catch(()=>{
-        if(USE_DB())toast("결과는 이 기기에 저장됐지만 서버 전송에 실패했어요.");
+        if(USE_DB())toast("답안은 안전하게 보관했어요. 잠시 후 자동으로 다시 보낼게요.");
       });}
       set({students:updatedStudents,menu:"result",focusDoms:null});
-      toast((fd&&fd.length)?("🎯 "+fd.join("·")+" 영역 재진단 완료!"):"🎉 진단이 완료되었습니다!");
+      toast((fd&&fd.length)?("🎯 "+fd.join("·")+" 영역 재진단을 제출했어요!"):"🎉 잘 제출했어요! 수고했어요.");
     });
     onA(".qd",e=>set({sQ:Number(e.target.dataset.i)}));
     // 언어 토글 (진행 중)
@@ -3690,6 +3755,14 @@ function bindEv(){
         if(n1v!==n2v){set({pwChange:{ok:false,msg:"❌ 새 비밀번호가 일치하지 않아요."}});return;}
         localStorage.setItem("union_pw_v1",n1v);
         set({pwChange:{ok:true,msg:"✅ 비밀번호가 변경됐어요!"}});
+      });
+      on("btn-flush",async()=>{
+        toast("다시 보내는 중...");
+        const r=await flushPending();
+        if(r.left===0)toast("✅ "+r.sent+"건을 모두 보냈어요.");
+        else toast("⚠️ "+r.sent+"건 성공, "+r.left+"건은 아직 실패예요.");
+        await syncFromDB();
+        set({});
       });
       on("btn-tc-edit",()=>set({page:"tcEnter"}));
       on("btn-force-reload",()=>{
