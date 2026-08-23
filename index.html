@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-15"/>
+<meta name="app-version" content="2026-08-23-17"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -90,6 +90,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     border-bottom:2px solid #1B1830;padding-bottom:8px;margin-bottom:14px}
   svg{max-width:100%}
   a[href]:after{content:""}
+  img{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 .print-only{display:none}
 
@@ -242,6 +243,35 @@ const STY_C={"국제결혼가정(국내출생)":"#5B6EE8","국제결혼가정(�
 const SUP_ST=["예정","진행중","완료"];
 const SUP_ST_C={"예정":"#8A8FA3","진행중":"#F5A623","완료":"#22C79A"};
 function hFlag(c){return FLAG[c]||"\uD83C\uDF0F";}
+
+const ISO={"대한민국":"kr","베트남":"vn","중국":"cn","필리핀":"ph","일본":"jp","태국":"th",
+ "캄보디아":"kh","몽골":"mn","러시아":"ru","우즈베키스탄":"uz","카자흐스탄":"kz","키르기스스탄":"kg",
+ "네팔":"np","인도네시아":"id","미얀마":"mm","방글라데시":"bd","스리랑카":"lk","파키스탄":"pk",
+ "인도":"in","미국":"us","캐나다":"ca"};
+
+// 작은 국기 이미지. 불러오지 못하면 국가코드 칩이 대신 보인다.
+function hFlagImg(c,w){
+  w=w||18;
+  const code=ISO[c];
+  const hgt=Math.round(w*0.72);
+  if(!code){
+    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:'+w+'px;height:'+hgt
+      +'px;border-radius:3px;background:var(--b);color:var(--m);font-size:'+Math.round(w*0.42)+'px;font-weight:800;vertical-align:middle;flex-shrink:0">🌐</span>';
+  }
+  const alt=hcv(c);
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:'+w+'px;height:'+hgt
+    +'px;border-radius:3px;background:var(--b);color:var(--m);font-size:'+Math.round(w*0.44)+'px;font-weight:800;'
+    +'vertical-align:middle;flex-shrink:0;overflow:hidden;position:relative">'
+    +code.toUpperCase()
+    +'<img src="https://flagcdn.com/w40/'+code+'.png" alt="'+alt+'" width="'+w+'" height="'+hgt+'" loading="lazy" '
+    +'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" '
+    +'onerror="this.remove()"/></span>';
+}
+// 국기 + 국가명
+function hFlagName(c,w){
+  return '<span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle">'
+    +hFlagImg(c,w)+'<span>'+hcv(c)+'</span></span>';
+}
 
 // ── AI 코치 스타일(맞춤 프롬프트) ──────────────────────────
 const COACH_TPL=[
@@ -842,7 +872,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-15";
+const APP_VERSION = "2026-08-23-17";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -2194,7 +2224,7 @@ function hClassRoster(list){
     o+='<div style="font-size:10.5px;color:var(--m);margin-top:3px">'+s.grade+'학년 '+s.cls+'반 · 담임 '+hcv(s.teacher||"미지정")+'</div></div>';
     o+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:'+(done?"#E3FAF4":"#FFF6E5")+';color:'+(done?"#12A47C":"#C9821A")+';white-space:nowrap">'+(done?"진단완료":"미진단")+'</span></div>';
     o+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">';
-    o+='<span style="font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:8px;background:var(--bg);color:var(--m)">'+hFlag(co)+' '+hcv(co)+'</span>';
+    o+='<span style="font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:8px;background:var(--bg);color:var(--m);display:inline-flex;align-items:center">'+hFlagImg(co,16)+'<span style="margin-left:5px">'+hcv(co)+'</span></span>';
     o+='<span style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:8px;background:'+(STY_C[st]||"#8A8FA3")+'1A;color:'+(STY_C[st]||"#8A8FA3")+'">'+hcv(st)+'</span>';
     if(nSup)o+='<span style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:8px;background:#FFF0F6;color:#D6417F">\uD83D\uDCC5 지원 '+nSup+'건</span>';
     o+='</div>';
@@ -2311,10 +2341,13 @@ function hDiagSummary(s){
     o+='<td style="padding:11px 8px;text-align:center;font-weight:900;color:var(--p);font-size:15px">'+t+(dt!==null?'<span style="font-size:10px;font-weight:700;color:'+(dt>=0?"#22C79A":"#E8445A")+';margin-left:4px">'+(dt>=0?"▲":"▼")+Math.abs(dt)+'</span>':"")+'</td>';
     const sr=subScores(r.scores)||{};
     SUBS.forEach(k=>{const v=Number(sr[k])||0;o+='<td style="padding:11px 6px;text-align:center;font-weight:700;color:'+(v<60?"#E8445A":"var(--t)")+'">'+v+'</td>';});
-    o+='<td style="padding:11px 8px;text-align:center;color:var(--m);font-weight:600">'+hcv(r.date||"-")+'</td>';
+    o+='<td style="padding:11px 8px;text-align:center">';
+    o+='<input class="rd-date no-print" data-i="'+i+'" type="date" value="'+hcv(r.date||"")+'" style="width:132px;padding:5px 8px;border:1px solid var(--b);border-radius:8px;background:var(--s);font-size:11.5px;font-weight:600;color:var(--t);font-family:inherit;cursor:pointer;outline:none"/>';
+    o+='<span class="print-only" style="font-size:12px;color:var(--m);font-weight:600">'+hcv(r.date||"-")+'</span></td>';
     o+='<td class="no-print" style="padding:11px 6px;text-align:center"><button class="rd-del" data-i="'+i+'" title="'+(i+1)+'회차 삭제" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">삭제</button></td></tr>';
   });
   o+='</table></div>';
+  o+='<div class="no-print" style="font-size:11px;color:var(--m);margin-top:9px;line-height:1.6">분석완료일을 실제 진단한 날짜로 고칠 수 있어요. 바꾸면 바로 저장되고, 회차 순서도 날짜에 맞춰 정리됩니다.</div>';
   // 같은 날 같은 점수가 반복되면 실수로 여러 번 제출된 것이다
   const dupN=(()=>{const seen=new Set();let n=0;
     rows.forEach(r=>{const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
@@ -2934,7 +2967,7 @@ function pgBulkAdd(){
         body+='<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;background:var(--bg)">';
         body+='<span style="font-size:11px;color:var(--m);font-weight:700;width:22px;flex-shrink:0">'+(r.no!==null?r.no:(i+1))+'</span>';
         body+='<span style="font-size:13.5px;font-weight:800;flex:1">'+hcv(r.name)+'</span>';
-        body+='<span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:8px;background:var(--s);color:var(--m)">'+hFlag(r.country)+' '+hcv(r.country)+'</span>';
+        body+='<span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:8px;background:var(--s);color:var(--m);display:inline-flex;align-items:center">'+hFlagImg(r.country,15)+'<span style="margin-left:5px">'+hcv(r.country)+'</span></span>';
         body+='<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;background:'+(STY_C[r.stype]||"#8A8FA3")+'1A;color:'+(STY_C[r.stype]||"#8A8FA3")+'">'+hcv(r.stype)+'</span>';
         body+='</div>';
       });
@@ -3011,7 +3044,7 @@ function pgSchoolView(){
 
   // 출신국가 분포
   const cm={};flt.forEach(s=>{const c=s.country||"대한민국";cm[c]=(cm[c]||0)+1;});
-  const cRows=Object.entries(cm).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([c,v])=>({lb:hFlag(c)+" "+c,v,c:"#5B6EE8"}));
+  const cRows=Object.entries(cm).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([c,v])=>({lb:hFlagName(c,16),v,c:"#5B6EE8"}));
   body+=hStatBar("출신국가 분포",cRows,flt.length,Object.keys(cm).length+"개국");
 
   // 학년별 인원
@@ -3028,7 +3061,7 @@ function pgSchoolView(){
 function pgForm(mode){const{form:f,fe}=S,isE=mode==="edit";let body=hTopbar(isE?"학생 수정":"학생 등록");body+='<div style="max-width:460px;margin:0 auto;padding:16px"><div class="card" style="padding:0;overflow:hidden"><div style="padding:18px 22px 14px;border-bottom:1px solid var(--b);background:var(--pl)"><div style="font-size:15px;font-weight:700;color:var(--p)">'+(isE?"학생 정보 수정":"새 학생 등록")+'</div><div style="font-size:11px;color:var(--p);opacity:.7;margin-top:2px">'+(isE?"변경할 항목을 수정해 주세요.":"기본 정보를 입력하세요.")+'</div></div><div style="padding:22px;display:flex;flex-direction:column;gap:17px">';body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">학생 이름 <span style="color:var(--d)">*</span></label><input id="form-name" autocomplete="off" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.name?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/>'+(fe.name?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.name+'</div>':"")+'</div>';body+=hGradeCls(f.grade,f.cls||1,"form-");body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">담임교사 <span style="color:var(--d)">*</span></label><input id="form-teacher" autocomplete="off" list="tl" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.teacher?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/><datalist id="tl">'+[...new Set(S.students.map(s=>s.teacher).filter(Boolean))].map(t=>'<option value="'+t+'"/>').join("")+'</datalist>'+(fe.teacher?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.teacher+'</div>':"")
 +((!f.teacher&&homeroomOf(f.grade,f.cls||1))?'<div style="color:var(--m);font-size:11px;margin-top:5px;line-height:1.6">비워두면 '+hcv(HOMEROOM_YEAR)+'학년도 '+f.grade+'학년 '+(f.cls||1)+'반 담임 <strong>'+hcv(homeroomOf(f.grade,f.cls||1))+'</strong> 선생님으로 저장돼요.</div>':"")
 +'</div>';
-body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">\uD83C\uDF0F 출신국가</label><select id="form-country" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--b);font-size:15px;outline:none;color:var(--t);background:var(--bg);font-family:inherit;cursor:pointer">'+COUNTRIES.map(c=>'<option value="'+c+'"'+((f.country||"대한민국")===c?" selected":"")+'>'+hFlag(c)+" "+c+'</option>').join("")+'</select></div>';
+body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">\uD83C\uDF0F 출신국가</label><select id="form-country" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--b);font-size:15px;outline:none;color:var(--t);background:var(--bg);font-family:inherit;cursor:pointer">'+COUNTRIES.map(c=>'<option value="'+c+'"'+((f.country||"대한민국")===c?" selected":"")+'>'+c+'</option>').join("")+'</select></div>';
 body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">\uD83D\uDC65 학생 유형</label><select id="form-stype" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--b);font-size:15px;outline:none;color:var(--t);background:var(--bg);font-family:inherit;cursor:pointer">'+STYPES.map(c=>'<option value="'+c+'"'+((f.stype||STYPES[0])===c?" selected":"")+'>'+c+'</option>').join("")+'</select><div style="font-size:10px;color:var(--m);margin-top:5px;line-height:1.5">교육부 다문화학생 분류 기준이에요. 유형별 통계와 지원 계획에 사용돼요.</div></div>';
 body+='<div style="display:flex;gap:8px;margin-top:2px"><button id="fc" class="btn-out">취소</button><button id="fs" class="btn-p" style="box-shadow:0 4px 14px #5B4EE835">'+(isE?"저장하기":"등록하기")+'</button></div></div></div></div>';return hLayout(tcSidebar(),body);}
 
@@ -3042,17 +3075,21 @@ body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div s
 body+='<div class="card" style="padding:13px 15px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:12.5px;font-weight:800">학생 기본 정보</div>'
 +'<button id="btn-print" class="no-print" style="padding:6px 13px;border-radius:9px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:11.5px;font-weight:700;cursor:pointer">인쇄 / PDF 저장</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px">'
 +[["이름",hcv(s.name)],["학년·반",s.grade+"학년 "+s.cls+"반"],
-   ["담임교사",hcv(s.teacher||homeroomOf(s.grade,s.cls)||"미지정")],["등록일",hcv(s.at||"-")]]
+   ["담임교사",hcv(s.teacher||homeroomOf(s.grade,s.cls)||"미지정")]]
   .map(([k,v])=>'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">'+k+'</div><div style="font-size:12.5px;font-weight:700;margin-top:3px;word-break:keep-all">'+v+'</div></div>').join("")
++'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">등록일</div>'
++'<input id="qk-at" type="date" class="no-print" value="'+hcv(s.at||td())+'" style="width:100%;margin-top:4px;padding:3px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none"/>'
++'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.at||"-")+'</div></div>'
 +'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">출신국가</div>'
++'<div style="display:flex;align-items:center;gap:7px;margin-top:4px">'+hFlagImg(s.country||"대한민국",20)
 +'<select id="qk-country" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
-+COUNTRIES.map(c=>'<option value="'+hcv(c)+'"'+((s.country||"대한민국")===c?" selected":"")+'>'+hFlag(c)+" "+hcv(c)+'</option>').join("")+'</select>'
-+'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hFlag(s.country||"대한민국")+' '+hcv(s.country||"대한민국")+'</div></div>'
++COUNTRIES.map(c=>'<option value="'+hcv(c)+'"'+((s.country||"대한민국")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select></div>'
++'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.country||"대한민국")+'</div></div>'
 +'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">학생 유형</div>'
 +'<select id="qk-stype" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
 +STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
 +'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
-+'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">출신국가와 학생 유형은 여기서 바로 바꿀 수 있어요. 선택하면 저장됩니다.</div></div>';
++'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.</div></div>';
 body+=hDiagSummary(s);
 body+=hTeacherNote(s);
 if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
@@ -3619,13 +3656,17 @@ function pgAdmin(){
 
 // ── 지원 프로그램 ─────────────────────────────────────────
 function pgSupport(){
-  const{students:sl,programs:progs}=S;
+  const{programs:progs,tcGrade,tcCls,tcIsSpecial}=S;
+  // 담임은 자기 반만, 전담·연구부는 전교생
+  const sl=tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls);
   const done=sl.filter(s=>s.scores);
   const needSupport={};
   SUBS.forEach(k=>{const ns=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<60;});if(ns.length)needSupport[k]=ns;});
   const totalNeed=new Set(Object.values(needSupport).flat().map(s=>s.id)).size;
   let body=hTopbar("지원 프로그램 관리",false);
   body+='<div style="padding:16px 20px;max-width:900px">';
+  body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:14px;font-weight:600">'
+    +(tcIsSpecial?"학교 전체":(tcGrade+"학년 "+tcCls+"반"))+' · 진단 완료 '+done.length+'명</div>';
   // 요약 카드
   body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center"><div style="font-size:30px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:12px;color:var(--m);margin-top:3px">60점 미만이 하나라도 있는 학생</div></div>';
   body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
@@ -4242,7 +4283,7 @@ function bindEv(){
     on("btn-go-coach",()=>set({menu:"admin"}));
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
     // 출신국가·학생유형 즉시 저장
-    [["qk-country","country","출신국가"],["qk-stype","stype","학생 유형"]].forEach(([id,key,label])=>{
+    [["qk-country","country","출신국가"],["qk-stype","stype","학생 유형"],["qk-at","at","등록일"]].forEach(([id,key,label])=>{
       const el=document.getElementById(id);
       if(!el)return;
       el.addEventListener("change",()=>{
@@ -4283,6 +4324,23 @@ function bindEv(){
       const r=await dbSaveStudent(us);
       if(USE_DB()&&r===false)toast("⚠️ 화면에서는 지웠지만 서버 반영에 실패했어요. 관리자 화면에서 확인해 주세요.");
     };
+    // 분석완료일 수정 — 실제 진단한 날짜로 맞춘다
+    document.querySelectorAll(".rd-date").forEach(el=>{
+      el.addEventListener("change",()=>{
+        const idx=Number(el.dataset.i);
+        const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+        const hist=(stu.scoreHistory&&stu.scoreHistory.length)?stu.scoreHistory.slice()
+                   :(stu.scores?[{date:stu.at,scores:stu.scores}]:[]);
+        if(!hist[idx])return;
+        hist[idx]={...hist[idx],date:el.value||hist[idx].date};
+        hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+        const us={...stu,scoreHistory:hist,scores:hist.length?hist[hist.length-1].scores:stu.scores};
+        set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
+        saveSt(S.students);
+        dbSaveStudent(us);
+        toast("분석완료일을 "+(el.value||"-")+"(으)로 바꿨어요.");
+      });
+    });
     onA(".rd-del",e=>{
       const idx=Number(e.currentTarget.dataset.i);
       const stu=S.students.find(x=>x.id===sid);if(!stu)return;
