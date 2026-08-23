@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-17"/>
+<meta name="app-version" content="2026-08-23-18"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -112,6 +112,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .brand-smile{position:absolute;left:2%;right:2%;bottom:.02em;height:.3em;width:96%;overflow:visible}
 .brand-plus{width:.42em;height:.42em;margin-top:.06em;flex-shrink:0}
 .brand[data-tone="dark"] .brand-word i{color:#fff}
+
+/* ── 상세 화면 섹션 탭 ── */
+.dtabs{position:sticky;top:56px;z-index:9;display:flex;gap:6px;overflow-x:auto;
+  padding:9px 20px;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--b);scrollbar-width:none}
+.dtabs::-webkit-scrollbar{display:none}
+.dtab{flex-shrink:0;padding:7px 14px;border-radius:20px;border:1px solid var(--b);background:var(--s);
+  color:var(--m);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+  font-family:inherit;transition:background .15s,color .15s,border-color .15s}
+.dtab:hover{border-color:#B9B1F5;color:var(--p)}
+.dtab.on{background:var(--p);border-color:transparent;color:#fff}
+/* 탭·상단바에 가리지 않게 여유를 둔다 */
+.sec-anchor{scroll-margin-top:112px;display:block;height:0}
+@media print{.dtabs{display:none!important}}
 
 /* ── 교사용 섹션 헤더 ── */
 .sec{display:flex;align-items:baseline;gap:9px;margin-bottom:13px}
@@ -872,7 +886,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-17";
+const APP_VERSION = "2026-08-23-18";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1974,6 +1988,26 @@ function hCaseReport(s){
   return o;
 }
 
+// 상세 화면이 길어서 원하는 곳으로 바로 내려가도록 탭을 둔다
+function hDetailTabs(s){
+  const has=k=>{
+    if(k==="sec-result")return !!s.scores;
+    if(k==="sec-raw")return !!s.scores;
+    if(k==="sec-case")return !!s.scores;
+    if(k==="sec-neis")return !!s.scores;
+    return true;
+  };
+  const tabs=[["sec-basic","기본정보"],["sec-result","진단 결과"],["sec-raw","진단 데이터"],
+              ["sec-note","관찰 메모"],["sec-support","지원"],["sec-case","성장 사례"],
+              ["sec-team","협의"],["sec-log","기록장"],["sec-neis","종합의견"]].filter(([k])=>has(k));
+  let o='<div class="dtabs no-print">';
+  tabs.forEach(([k,t])=>{
+    o+='<button class="dtab" data-go="'+k+'">'+t+'</button>';
+  });
+  o+='</div>';
+  return o;
+}
+
 function hTeacherNote(s){
   let o='<div class="card" style="border:2px solid #FFE8D6;background:linear-gradient(135deg,#FFFBF7,#FFF7FB)">';
   o+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:5px"><span style="font-size:20px">👀</span>';
@@ -3069,10 +3103,10 @@ function pgDetail(){const s=S.students.find(x=>x.id===S.sid);if(!s)return"";cons
 const wk=_sr?SUBS.map(k=>[k,Number(_sr[k])||0]).sort((a,b)=>a[1]-b[1])[0]:null;
 const _pg=(S.programs&&S.programs.length?S.programs:defPrograms());
 const progOf=k=>{const p=_pg.find(x=>x.domain===k);return p?p.name:"관련 지원 프로그램";};
-let body=hTopbar(s.name)+'<div style="display:flex;gap:8px;padding:8px 20px;background:var(--s);border-bottom:1px solid var(--b)"><button id="btn-edit" style="background:var(--pl);color:var(--p);border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer">수정</button><button id="btn-del" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer">삭제</button></div>';
+let body=hTopbar(s.name)+hDetailTabs(s)+'<div style="display:flex;gap:8px;padding:8px 20px;background:var(--s);border-bottom:1px solid var(--b)"><button id="btn-edit" style="background:var(--pl);color:var(--p);border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer">수정</button><button id="btn-del" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer">삭제</button></div>';
 body+='<div style="padding:14px 20px;max-width:700px;display:flex;flex-direction:column;gap:12px">';
 body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div style="width:46px;height:46px;border-radius:13px;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:var(--p);flex-shrink:0">'+s.name[0]+'</div><div style="flex:1"><div style="font-size:16px;font-weight:800">'+s.name+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · 담임 '+(s.teacher||"미지정")+' · 등록 '+s.at+'</div></div><span style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span></div>';
-body+='<div class="card" style="padding:13px 15px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:12.5px;font-weight:800">학생 기본 정보</div>'
+body+='<div id="sec-basic" class="sec-anchor"></div><div class="card" style="padding:13px 15px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:12.5px;font-weight:800">학생 기본 정보</div>'
 +'<button id="btn-print" class="no-print" style="padding:6px 13px;border-radius:9px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:11.5px;font-weight:700;cursor:pointer">인쇄 / PDF 저장</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px">'
 +[["이름",hcv(s.name)],["학년·반",s.grade+"학년 "+s.cls+"반"],
    ["담임교사",hcv(s.teacher||homeroomOf(s.grade,s.cls)||"미지정")]]
@@ -3090,8 +3124,8 @@ body+='<div class="card" style="padding:13px 15px"><div style="display:flex;just
 +STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
 +'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
 +'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.</div></div>';
-body+=hDiagSummary(s);
-body+=hTeacherNote(s);
+body+='<div id="sec-result" class="sec-anchor"></div>'+hDiagSummary(s);
+body+='<div id="sec-note" class="sec-anchor"></div>'+hTeacherNote(s);
 if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
 else body+='<div class="card" style="text-align:center;padding:20px"><div style="font-size:12px;color:var(--m);margin-bottom:12px">아직 진단 설문이 완료되지 않았어요.</div><button id="btn-start-survey" class="btn-p" style="width:auto;padding:10px 22px;font-size:13px">📋 진단 설문 시작하기</button></div>';
 // 성장 추이 카드
@@ -3103,12 +3137,12 @@ if(hist.length>=1){
   body+=hGrowthChart(hist);
   body+='</div>';
 }
-  body+=hRawAnswers(s);
-  body+=hSupportPanel(s,S.programs||defPrograms());
-  body+=hCaseReport(s);
-  body+=hTeamPanel(s);
+  body+='<div id="sec-raw" class="sec-anchor"></div>'+hRawAnswers(s);
+  body+='<div id="sec-support" class="sec-anchor"></div>'+hSupportPanel(s,S.programs||defPrograms());
+  body+='<div id="sec-case" class="sec-anchor"></div>'+hCaseReport(s);
+  body+='<div id="sec-team" class="sec-anchor"></div>'+hTeamPanel(s);
   const _extN=(s.logs||[]).filter(l=>EXT_ORGS.some(o=>String(l.author||"").indexOf(o)===0)).length;
-  body+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px"><div style="font-size:13px;font-weight:700">교사 협업 기록장</div>'
+  body+='<div id="sec-log" class="sec-anchor"></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px"><div style="font-size:13px;font-weight:700">교사 협업 기록장</div>'
    +(_extN?'<span style="font-size:11px;font-weight:700;color:#0B7355;background:#E3FAF4;padding:3px 9px;border-radius:20px">🏢 외부기관 기록 '+_extN+'건</span>':'')+'</div>'+hLogInput(lAuth,lTags,lMemo)+hTimeline(s.logs)+'</div>';
 // ── NEIS 종합의견 ──────────────────────────────────────
   // 설정(키·글자수·코치)은 관리자 화면으로 옮겼다.
@@ -3119,7 +3153,7 @@ if(hist.length>=1){
     const fresh=dr&&dr.round===rnd&&dr.text;
     const txt=(S.neisText!==undefined&&S.neisText!=="")?S.neisText:(fresh?dr.text:"");
 
-    body+='<div class="card">';
+    body+='<div id="sec-neis" class="sec-anchor"></div><div class="card">';
     body+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">';
     body+='<span style="font-size:19px">✍️</span>';
     body+='<div style="flex:1"><div class="eyebrow">기록</div>';
@@ -3870,6 +3904,11 @@ async function genNeis(s){
 // ══════════════════════════════════════════════════════════
 function render(){
   const{page,menu,toast:msg}=S;
+  // 상세 화면을 벗어나면 스크롤 감시를 끊는다
+  if(S._detailScroll&&!(page==="teacher"&&menu==="detail")){
+    try{ window.removeEventListener("scroll",S._detailScroll); }catch(e){}
+    S._detailScroll=null;
+  }
   if(page==="teacher"||page==="external"||page==="ext")autoSync(false);
   let h="";
   if(page==="login")          h=pgLogin();
@@ -4281,6 +4320,34 @@ function bindEv(){
     // AI 코치 선택
     onA(".coachpick",e=>set({coachSel:e.currentTarget.dataset.c}));
     on("btn-go-coach",()=>set({menu:"admin"}));
+    // 탭을 누르면 해당 위치로 이동
+    onA(".dtab",e=>{
+      const id=e.currentTarget.dataset.go;
+      const el=document.getElementById(id);
+      if(!el)return;
+      el.scrollIntoView({behavior:"smooth",block:"start"});
+    });
+    // 스크롤 위치에 따라 지금 보고 있는 탭을 표시
+    {
+      const tabs=Array.prototype.slice.call(document.querySelectorAll(".dtab"));
+      if(tabs.length){
+        const mark=()=>{
+          let cur=tabs[0];
+          tabs.forEach(t=>{
+            const el=document.getElementById(t.dataset.go);
+            if(el&&el.getBoundingClientRect().top<=140)cur=t;
+          });
+          tabs.forEach(t=>t.classList.remove("on"));
+          cur.classList.add("on");
+        };
+        mark();
+        let tick=false;
+        const onScroll=()=>{ if(tick)return; tick=true;
+          requestAnimationFrame(()=>{ mark(); tick=false; }); };
+        window.addEventListener("scroll",onScroll,{passive:true});
+        S._detailScroll=onScroll;
+      }
+    }
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
     // 출신국가·학생유형 즉시 저장
     [["qk-country","country","출신국가"],["qk-stype","stype","학생 유형"],["qk-at","at","등록일"]].forEach(([id,key,label])=>{
