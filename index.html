@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-14"/>
+<meta name="app-version" content="2026-08-23-15"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-14";
+const APP_VERSION = "2026-08-23-15";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -904,6 +904,20 @@ function showUpdateBar(latest){
       학생 정보를 볼 수 없도록 3_보안잠금_RLS.sql 을 반드시 실행하세요.
       실행하면 로그인한 선생님 계정만 학생 데이터를 읽을 수 있습니다.
    ══════════════════════════════════════════════════════════ */
+/* ── 학년·반 담임 명단 ────────────────────────────────────
+   학생을 등록하면 학년·반에 맞는 담임이 자동으로 들어갑니다.
+   해가 바뀌면 이 부분만 고쳐주세요. */
+const HOMEROOM_YEAR = "2026";
+const HOMEROOM = {
+  "1-1":"박보영",
+  "2-1":"김영민", "2-2":"장수연",
+  "3-1":"김성영", "3-2":"박재영",
+  "4-1":"박진용", "4-2":"염왕윤",
+  "5-1":"황선미", "5-2":"심예슬",
+  "6-1":"김은영", "6-2":"화신혜"
+};
+function homeroomOf(grade,cls){ return HOMEROOM[Number(grade)+"-"+Number(cls)] || ""; }
+
 const SCHOOL_DB = {
   url: "https://ezfkibwyuhazsjqmemua.supabase.co",
   key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZmtpYnd5dWhhenNqcW1lbXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNTI0MjIsImV4cCI6MjEwMjYyODQyMn0.vnMDSOnQ7pEtdGFWidcB8Nfez1fa8oFN2py3EVs8EEg"
@@ -3011,7 +3025,9 @@ function pgSchoolView(){
   return hLayout(tcSidebar(),body);
 }
 
-function pgForm(mode){const{form:f,fe}=S,isE=mode==="edit";let body=hTopbar(isE?"학생 수정":"학생 등록");body+='<div style="max-width:460px;margin:0 auto;padding:16px"><div class="card" style="padding:0;overflow:hidden"><div style="padding:18px 22px 14px;border-bottom:1px solid var(--b);background:var(--pl)"><div style="font-size:15px;font-weight:700;color:var(--p)">'+(isE?"학생 정보 수정":"새 학생 등록")+'</div><div style="font-size:11px;color:var(--p);opacity:.7;margin-top:2px">'+(isE?"변경할 항목을 수정해 주세요.":"기본 정보를 입력하세요.")+'</div></div><div style="padding:22px;display:flex;flex-direction:column;gap:17px">';body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">학생 이름 <span style="color:var(--d)">*</span></label><input id="form-name" autocomplete="off" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.name?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/>'+(fe.name?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.name+'</div>':"")+'</div>';body+=hGradeCls(f.grade,f.cls||1,"form-");body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">담임교사 <span style="color:var(--d)">*</span></label><input id="form-teacher" autocomplete="off" list="tl" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.teacher?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/><datalist id="tl">'+[...new Set(S.students.map(s=>s.teacher).filter(Boolean))].map(t=>'<option value="'+t+'"/>').join("")+'</datalist>'+(fe.teacher?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.teacher+'</div>':"")+'</div>';
+function pgForm(mode){const{form:f,fe}=S,isE=mode==="edit";let body=hTopbar(isE?"학생 수정":"학생 등록");body+='<div style="max-width:460px;margin:0 auto;padding:16px"><div class="card" style="padding:0;overflow:hidden"><div style="padding:18px 22px 14px;border-bottom:1px solid var(--b);background:var(--pl)"><div style="font-size:15px;font-weight:700;color:var(--p)">'+(isE?"학생 정보 수정":"새 학생 등록")+'</div><div style="font-size:11px;color:var(--p);opacity:.7;margin-top:2px">'+(isE?"변경할 항목을 수정해 주세요.":"기본 정보를 입력하세요.")+'</div></div><div style="padding:22px;display:flex;flex-direction:column;gap:17px">';body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">학생 이름 <span style="color:var(--d)">*</span></label><input id="form-name" autocomplete="off" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.name?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/>'+(fe.name?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.name+'</div>':"")+'</div>';body+=hGradeCls(f.grade,f.cls||1,"form-");body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">담임교사 <span style="color:var(--d)">*</span></label><input id="form-teacher" autocomplete="off" list="tl" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid '+(fe.teacher?"var(--d)":"var(--b)")+';font-size:15px;outline:none;color:var(--t);background:var(--bg)"/><datalist id="tl">'+[...new Set(S.students.map(s=>s.teacher).filter(Boolean))].map(t=>'<option value="'+t+'"/>').join("")+'</datalist>'+(fe.teacher?'<div style="color:var(--d);font-size:11px;margin-top:4px">'+fe.teacher+'</div>':"")
++((!f.teacher&&homeroomOf(f.grade,f.cls||1))?'<div style="color:var(--m);font-size:11px;margin-top:5px;line-height:1.6">비워두면 '+hcv(HOMEROOM_YEAR)+'학년도 '+f.grade+'학년 '+(f.cls||1)+'반 담임 <strong>'+hcv(homeroomOf(f.grade,f.cls||1))+'</strong> 선생님으로 저장돼요.</div>':"")
++'</div>';
 body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">\uD83C\uDF0F 출신국가</label><select id="form-country" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--b);font-size:15px;outline:none;color:var(--t);background:var(--bg);font-family:inherit;cursor:pointer">'+COUNTRIES.map(c=>'<option value="'+c+'"'+((f.country||"대한민국")===c?" selected":"")+'>'+hFlag(c)+" "+c+'</option>').join("")+'</select></div>';
 body+='<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">\uD83D\uDC65 학생 유형</label><select id="form-stype" style="width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--b);font-size:15px;outline:none;color:var(--t);background:var(--bg);font-family:inherit;cursor:pointer">'+STYPES.map(c=>'<option value="'+c+'"'+((f.stype||STYPES[0])===c?" selected":"")+'>'+c+'</option>').join("")+'</select><div style="font-size:10px;color:var(--m);margin-top:5px;line-height:1.5">교육부 다문화학생 분류 기준이에요. 유형별 통계와 지원 계획에 사용돼요.</div></div>';
 body+='<div style="display:flex;gap:8px;margin-top:2px"><button id="fc" class="btn-out">취소</button><button id="fs" class="btn-p" style="box-shadow:0 4px 14px #5B4EE835">'+(isE?"저장하기":"등록하기")+'</button></div></div></div></div>';return hLayout(tcSidebar(),body);}
@@ -3025,8 +3041,18 @@ body+='<div style="padding:14px 20px;max-width:700px;display:flex;flex-direction
 body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div style="width:46px;height:46px;border-radius:13px;background:var(--pl);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:var(--p);flex-shrink:0">'+s.name[0]+'</div><div style="flex:1"><div style="font-size:16px;font-weight:800">'+s.name+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · 담임 '+(s.teacher||"미지정")+' · 등록 '+s.at+'</div></div><span style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span></div>';
 body+='<div class="card" style="padding:13px 15px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:12.5px;font-weight:800">학생 기본 정보</div>'
 +'<button id="btn-print" class="no-print" style="padding:6px 13px;border-radius:9px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:11.5px;font-weight:700;cursor:pointer">인쇄 / PDF 저장</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px">'
-+[["이름",hcv(s.name)],["출신국가",hFlag(s.country||"대한민국")+" "+hcv(s.country||"대한민국")],["학생 유형",hcv(s.stype||"일반학생")],["학년·반",s.grade+"학년 "+s.cls+"반"],["담임교사",hcv(s.teacher||"미지정")],["등록일",hcv(s.at||"-")]].map(([k,v])=>'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">'+k+'</div><div style="font-size:12.5px;font-weight:700;margin-top:3px;word-break:keep-all">'+v+'</div></div>').join("")
-+'</div></div>';
++[["이름",hcv(s.name)],["학년·반",s.grade+"학년 "+s.cls+"반"],
+   ["담임교사",hcv(s.teacher||homeroomOf(s.grade,s.cls)||"미지정")],["등록일",hcv(s.at||"-")]]
+  .map(([k,v])=>'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">'+k+'</div><div style="font-size:12.5px;font-weight:700;margin-top:3px;word-break:keep-all">'+v+'</div></div>').join("")
++'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">출신국가</div>'
++'<select id="qk-country" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
++COUNTRIES.map(c=>'<option value="'+hcv(c)+'"'+((s.country||"대한민국")===c?" selected":"")+'>'+hFlag(c)+" "+hcv(c)+'</option>').join("")+'</select>'
++'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hFlag(s.country||"대한민국")+' '+hcv(s.country||"대한민국")+'</div></div>'
++'<div style="padding:9px 11px;border-radius:10px;background:var(--bg)"><div style="font-size:10px;color:var(--m);font-weight:600">학생 유형</div>'
++'<select id="qk-stype" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
++STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
++'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
++'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">출신국가와 학생 유형은 여기서 바로 바꿀 수 있어요. 선택하면 저장됩니다.</div></div>';
 body+=hDiagSummary(s);
 body+=hTeacherNote(s);
 if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
@@ -3451,6 +3477,25 @@ function pgAdmin(){
     body += '<input id="pw-new2" type="password" placeholder="새 비밀번호 확인" style="padding:11px 14px;border-radius:12px;border:1.5px solid var(--b);font-size:14px;outline:none;color:var(--t);background:var(--bg)"/>';
     if(S.pwChange&&S.pwChange.msg)body+='<div style="font-size:12px;color:'+(S.pwChange.ok?"var(--g)":"var(--d)")+';font-weight:600">'+S.pwChange.msg+'</div>';
     body += '<button id="btn-pw-change" class="btn-p">비밀번호 변경</button></div></div>';
+
+    // ── 담임 채우기 ──
+    {
+      const blank=(S.students||[]).filter(s=>!String(s.teacher||"").trim()&&homeroomOf(s.grade,s.cls));
+      const wrong=(S.students||[]).filter(s=>{
+        const hr=homeroomOf(s.grade,s.cls);
+        return hr && String(s.teacher||"").trim() && String(s.teacher).trim()!==hr;
+      });
+      if(blank.length||wrong.length){
+        body += '<div class="card">';
+        body += '<div style="font-size:13px;font-weight:800;margin-bottom:5px">담임교사 채우기</div>';
+        body += '<div style="font-size:11.5px;color:var(--m);line-height:1.7;margin-bottom:11px">'
+          +HOMEROOM_YEAR+'학년도 담임 명단을 기준으로 학생의 담임을 채웁니다.'
+          +(blank.length?('<br>· 비어 있는 학생 <strong>'+blank.length+'명</strong>'):'')
+          +(wrong.length?('<br>· 명단과 다른 학생 <strong>'+wrong.length+'명</strong> ('+hcv(wrong.slice(0,3).map(s=>s.name+"→"+homeroomOf(s.grade,s.cls)).join(", "))+(wrong.length>3?" 외":"")+')'):'')
+          +'</div>';
+        body += '<button id="btn-fill-hr" style="padding:10px 18px;border-radius:11px;border:none;background:var(--p);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">담임 자동 채우기</button></div>';
+      }
+    }
 
     // ── 백업 ──
     {
@@ -4000,7 +4045,7 @@ function bindEv(){
 
       // ③ 그래도 없으면 새 학생
       if(!found){
-        found={id:uid(),name,grade,cls,teacher:"",country:"대한민국",stype:"일반학생",
+        found={id:uid(),name,grade,cls,teacher:homeroomOf(grade,cls),country:"대한민국",stype:"일반학생",
                at:td(),scores:null,scoreHistory:[],logs:[],supports:[]};
         S.students=[...S.students,found];saveSt(S.students);
       }
@@ -4093,7 +4138,7 @@ function bindEv(){
       const {rows}=parseRoster(S.bulkText,g,c);
       const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
       const add=rows.filter(r=>!exist.has(r.name+"|"+r.grade+"|"+r.cls))
-        .map(r=>({id:uid(),name:r.name,grade:r.grade,cls:r.cls,teacher:S.tcName||"",
+        .map(r=>({id:uid(),name:r.name,grade:r.grade,cls:r.cls,teacher:homeroomOf(r.grade,r.cls)||S.tcName||"",
           country:r.country,stype:r.stype,at:td(),scores:null,scoreHistory:[],logs:[],supports:[]}));
       if(!add.length){toast("새로 등록할 학생이 없어요.");return;}
       const next=[...S.students,...add];
@@ -4139,7 +4184,7 @@ function bindEv(){
       S.form={...S.form,name:nmv,teacher:tcv};
       const cov=(document.getElementById("form-country")||{}).value||S.form.country||"대한민국";
       const stv=(document.getElementById("form-stype")||{}).value||S.form.stype||STYPES[0];
-      if(menu==="formAdd"){const ns={id:uid(),name:nmv,grade:S.form.grade,cls:S.form.cls||1,teacher:tcv,country:cov,stype:stv,at:td(),scores:null,scoreHistory:[],logs:[],supports:[]};set({students:[...S.students,ns],menu:"survey",form:{name:"",grade:3,cls:1,teacher:"",country:"대한민국",stype:STYPES[0]},fe:{}});dbSaveStudent(ns);toast(ns.name+" 학생이 등록되었습니다.");}
+      if(menu==="formAdd"){const ns={id:uid(),name:nmv,grade:S.form.grade,cls:S.form.cls||1,teacher:tcv||homeroomOf(S.form.grade,S.form.cls||1),country:cov,stype:stv,at:td(),scores:null,scoreHistory:[],logs:[],supports:[]};set({students:[...S.students,ns],menu:"survey",form:{name:"",grade:3,cls:1,teacher:"",country:"대한민국",stype:STYPES[0]},fe:{}});dbSaveStudent(ns);toast(ns.name+" 학생이 등록되었습니다.");}
       else{const updStu=S.students.find(x=>x.id===sid);
         if(updStu){const us={...updStu,name:nmv,grade:S.form.grade,cls:S.form.cls||1,teacher:tcv,country:cov,stype:stv};set({students:S.students.map(s=>s.id===sid?us:s),menu:"detail",form:{name:"",grade:3,cls:1,teacher:"",country:"대한민국",stype:STYPES[0]},fe:{}});dbSaveStudent(us);}
         toast("학생 정보가 수정되었습니다.");}
@@ -4196,6 +4241,19 @@ function bindEv(){
     onA(".coachpick",e=>set({coachSel:e.currentTarget.dataset.c}));
     on("btn-go-coach",()=>set({menu:"admin"}));
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
+    // 출신국가·학생유형 즉시 저장
+    [["qk-country","country","출신국가"],["qk-stype","stype","학생 유형"]].forEach(([id,key,label])=>{
+      const el=document.getElementById(id);
+      if(!el)return;
+      el.addEventListener("change",()=>{
+        const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+        const us={...stu,[key]:el.value};
+        set({students:S.students.map(x=>x.id===sid?us:x)});
+        saveSt(S.students);
+        dbSaveStudent(us);
+        toast(label+"을(를) "+el.value+"(으)로 바꿨어요.");
+      });
+    });
     // 화면을 연 뒤 종합의견을 자동으로 채운다
     {
       const stu0=S.students.find(x=>x.id===sid);
@@ -4541,6 +4599,25 @@ function bindEv(){
         if(n1v!==n2v){set({pwChange:{ok:false,msg:"❌ 새 비밀번호가 일치하지 않아요."}});return;}
         localStorage.setItem("union_pw_v1",n1v);
         set({pwChange:{ok:true,msg:"✅ 비밀번호가 변경됐어요!"}});
+      });
+      on("btn-fill-hr",()=>{
+        const targets=(S.students||[]).filter(s=>{
+          const hr=homeroomOf(s.grade,s.cls);
+          return hr && String(s.teacher||"").trim()!==hr;
+        });
+        if(!targets.length){toast("채울 학생이 없어요.");return;}
+        showDelModal("…"+targets.length+"명의 담임을 "+HOMEROOM_YEAR+"학년도 명단으로 채울까요?", async()=>{
+          const next=S.students.map(s=>{
+            const hr=homeroomOf(s.grade,s.cls);
+            return (hr&&String(s.teacher||"").trim()!==hr)?{...s,teacher:hr}:s;
+          });
+          set({students:next}); saveSt(next);
+          toast("서버에 반영하는 중...");
+          let n=0;
+          for(const s of targets){ if(await dbSaveStudent(next.find(x=>x.id===s.id))!==false)n++; }
+          toast("✅ "+n+"명의 담임을 채웠어요.");
+          set({});
+        });
       });
       on("btn-backup",()=>{
         const c=downloadBackup();
