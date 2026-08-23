@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-04"/>
+<meta name="app-version" content="2026-08-23-05"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-04";
+const APP_VERSION = "2026-08-23-05";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -2324,7 +2324,7 @@ function pgLogin(){
     h+='<input id="pw-input" type="password" placeholder="비밀번호를 입력하세요" autocomplete="off" style="width:100%;padding:12px 14px;border-radius:11px;border:1.5px solid '+(S.pwErr?"var(--d)":"var(--b)")+';font-size:14px;outline:none;color:var(--t);background:#fff;margin-bottom:10px">';
     if(S.pwErr)h+='<div role="alert" style="color:var(--d);font-size:12px;font-weight:700;margin-bottom:9px">'+hcv(S.pwErr)+'</div>';
     h+='<button id="btn-pw-ok" class="btn-p" style="border-radius:11px">입장하기</button>';
-    h+='<div style="font-size:11px;color:var(--m);text-align:center;margin-top:10px">DB 미연결 상태예요. 기본 비밀번호 <code style="background:#fff;padding:2px 7px;border-radius:5px;color:var(--p);border:1px solid var(--b)">teacher1234</code></div>';
+    h+='<div style="font-size:11px;color:var(--m);text-align:center;margin-top:10px">DB 미연결 상태예요. 기본 비밀번호 <code style="background:#fff;padding:2px 7px;border-radius:5px;color:var(--p);border:1px solid var(--b)">nadong1234</code></div>';
   }
   h+='</div></div></div></div>';
   return h;
@@ -3801,7 +3801,7 @@ function bindEv(){
       const pwEl=document.getElementById("admin-pw-input");
       const errEl=document.getElementById("admin-pw-err");
       const pw=pwEl?pwEl.value:"";
-      if(pw!==DEL_PW){
+      if(pw!==ADMIN_PW){
         if(errEl)errEl.textContent="❌ 비밀번호가 틀렸어요!";
         if(pwEl){pwEl.value="";pwEl.focus();}
         return;
@@ -3994,7 +3994,8 @@ function bindEv(){
 }
 
 // ── 삭제 비밀번호 모달 ─────────────────────────────
-const DEL_PW = "1234";
+const DEL_PW = "1234";           // 회차·기록·학생 삭제용
+const ADMIN_PW = "nadong1234";   // 관리자 화면 진입용
 let _delCallback = null;
 
 function showDelModal(studentName, onConfirm){
@@ -4044,8 +4045,9 @@ window.addEventListener("load", ()=>{
       if(pwEl){ pwEl.value=""; pwEl.focus(); }
       return;
     }
+    const cb = _delCallback;   // 모달을 닫으면 콜백이 지워지므로 먼저 붙잡아 둔다
     hideDelModal();
-    if(_delCallback) _delCallback();
+    if(cb) cb();
   });
 
   // 엔터 키로 확인
