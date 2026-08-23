@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-05"/>
+<meta name="app-version" content="2026-08-23-08"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -292,6 +292,110 @@ function maskName(n){
 }
 // 외부기관이 학생을 구분할 수 있는 최소한의 표식
 function extLabelOf(s){ return s.grade+"-"+s.cls+" "+maskName(s.name); }
+
+const BK_KEY="union_backup_at";
+function lastBackup(){ try{return localStorage.getItem(BK_KEY)||"";}catch(e){return "";} }
+function daysSinceBackup(){
+  const t=lastBackup(); if(!t)return 999;
+  const d=Math.floor((Date.now()-new Date(t).getTime())/86400000);
+  return isNaN(d)?999:d;
+}
+
+// 전체 데이터를 파일 하나로 묶는다
+function makeBackup(){
+  return {
+    format:"UNION+ backup",
+    version:APP_VERSION,
+    createdAt:new Date().toISOString(),
+    schoolYear:S.schoolYear||"",
+    counts:{
+      students:(S.students||[]).length,
+      rounds:(S.students||[]).reduce((a,s)=>a+((s.scoreHistory||[]).length||(s.scores?1:0)),0),
+      logs:(S.students||[]).reduce((a,s)=>a+((s.logs||[]).length),0)
+    },
+    students:S.students||[],
+    notices:S.notices||[],
+    programs:S.programs||[],
+    resources:S.resources||[]
+  };
+}
+
+function downloadBackup(){
+  const data=makeBackup();
+  const name="UNION백업_"+(S.schoolYear||"")+"_"+td()+".json";
+  try{
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }catch(e){
+    // Blob 이 막힌 환경 대비
+    const a=document.createElement("a");
+    a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(data));
+    a.download=name; a.click();
+  }
+  try{ localStorage.setItem(BK_KEY,new Date().toISOString()); }catch(e){}
+  return data.counts;
+}
+
+// 백업 파일을 읽어 지금 데이터와 합친다 (덮어쓰지 않는다)
+function mergeBackup(data){
+  if(!data||data.format!=="UNION+ backup")throw new Error("UNION+ 백업 파일이 아니에요.");
+  const cur=S.students||[];
+  const byId={}; cur.forEach(s=>byId[s.id]=s);
+  let added=0, merged=0;
+  (data.students||[]).forEach(b=>{
+    const c=byId[b.id];
+    if(!c){ byId[b.id]=b; added++; return; }
+    // 같은 학생이면 회차를 합치고 중복은 걸러낸다
+    const all=[...(c.scoreHistory||[]),...(b.scoreHistory||[])];
+    const seen=new Set(), hist=[];
+    all.sort((x,y)=>String(x.date||"").localeCompare(String(y.date||"")));
+    all.forEach(r=>{const k=(r.date||"")+"|"+SUBS.map(q=>(subScores(r.scores)||{})[q]).join(",");
+      if(!seen.has(k)){seen.add(k);hist.push(r);}});
+    const lg=[...(c.logs||[]),...(b.logs||[])];
+    const seenL=new Set(), logs=[];
+    lg.forEach(l=>{const k=(l.date||"")+"|"+(l.author||"")+"|"+(l.memo||"");
+      if(!seenL.has(k)){seenL.add(k);logs.push(l);}});
+    byId[b.id]={...b,...c,
+      scoreHistory:hist,
+      scores:hist.length?hist[hist.length-1].scores:(c.scores||b.scores||null),
+      logs, supports:(c.supports&&c.supports.length)?c.supports:(b.supports||[]),
+      tcNote:c.tcNote||b.tcNote||"", teamFb:c.teamFb||b.teamFb||null};
+    merged++;
+  });
+  return {students:Object.values(byId), added, merged};
+}
+
+function parseRoster(text,grade,cls){
+  const rows=[],bad=[];
+  String(text||"").split(/\r?\n/).forEach((line,idx)=>{
+    let raw=line.trim();
+    if(!raw)return;
+
+    // 맨 앞의 출석번호를 먼저 떼어낸다 ("1 김철수", "1. 김철수", "12) 김철수")
+    let no=null;
+    const mNo=raw.match(/^(\d{1,2})\s*[.)\]:،]?[\s\t,]+(.+)$/);
+    if(mNo){ no=Number(mNo[1]); raw=mNo[2].trim(); }
+
+    // 남은 부분을 탭 · 쉼표 · 2칸 이상 공백으로 나눈다
+    const cols=raw.split(/\t|,|\s{2,}/).map(c=>c.trim()).filter(c=>c!=="");
+    if(!cols.length)return;
+
+    let name="",country="",stype="";
+    cols.forEach(c=>{
+      if(/^\d{1,2}$/.test(c)&&no===null){ no=Number(c); return; }   // 남아 있는 번호
+      if(COUNTRIES.indexOf(c)>=0){ country=c; return; }
+      if(STYPES.indexOf(c)>=0){ stype=c; return; }
+      if(!name){ name=c; return; }
+    });
+    if(!name){ bad.push({line:idx+1,raw}); return; }
+    if(name.length>12){ bad.push({line:idx+1,raw}); return; }        // 문장이 섞여 들어온 줄
+    rows.push({no,name,grade,cls,country:country||"대한민국",stype:stype||"일반학생"});
+  });
+  return {rows,bad};
+}
 
 function hcv(s){return s?String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"):"";}
 function anDate(s){const hi=s.scoreHistory||[];if(hi.length&&hi[0].date)return hi[0].date;return s.scores?(s.at||"-"):"-";}
@@ -660,6 +764,7 @@ const S={
   coaches:loadCoach(), coachSel:"basic", coachEdit:null,
   focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0],
   rawOpen:false, rawTab:null, loginEmail:"", loggingIn:false, diag:null, diagRunning:false,
+  bulkText:"", bulkGrade:1, bulkCls:1,
   fltDom:"all", fltCond:"all", teamOpen:false,
   apiKey:localStorage.getItem("union_api_key")||"",
   _editNoticeId:null,
@@ -729,7 +834,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-05";
+const APP_VERSION = "2026-08-23-08";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -884,9 +989,9 @@ async function diagNet(){
       method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
       body:JSON.stringify({payload:{}})});
     if(r.status===404)
-      out.push({ok:false,t:"학생 제출 통로",d:"아직 만들어지지 않았어요. 5_학생제출_고치기.sql 을 실행하세요."});
+      out.push({ok:false,t:"학생 제출 통로",d:"아직 만들어지지 않았어요. 5_학생제출_중복방지.sql 을 실행하세요."});
     else if(r.status===401||r.status===403)
-      out.push({ok:false,t:"학생 제출 통로",d:"권한이 없습니다. 5_학생제출_고치기.sql 의 grant 구문까지 실행됐는지 확인하세요."});
+      out.push({ok:false,t:"학생 제출 통로",d:"권한이 없습니다. 5_학생제출_중복방지.sql 의 grant 구문까지 실행됐는지 확인하세요."});
     else out.push({ok:true,t:"학생 제출 통로",d:"정상 (식별자 없는 요청이라 거절된 것)"});
   }catch(e){ out.push({ok:false,t:"학생 제출 통로",d:"요청 실패 ("+(e&&e.message||"")+")"}); }
 
@@ -1090,6 +1195,26 @@ async function dbLoadStudents(retry){
   } catch(e){ /* silent */; return null; }
 }
 
+// 학생은 명단을 읽을 수 없으므로, 이름·학년·반이 맞을 때
+// 학생 번호만 돌려주는 전용 통로로 물어본다.
+// 이게 없으면 기기를 바꿀 때마다 같은 아이가 새로 생긴다.
+async function dbFindStudentId(name,grade,cls){
+  if(!USE_DB())return null;
+  try{
+    const res=await fetch(SB_URL+"/rest/v1/rpc/find_student",{
+      method:"POST",
+      headers:authHeaders({"Content-Type":"application/json"}),
+      body:JSON.stringify({p_name:String(name).trim(),p_grade:Number(grade),p_cls:Number(cls)})
+    });
+    if(!res.ok){
+      if(res.status===404)console.warn("[UNION+] find_student 미설치 — 5_학생제출_중복방지.sql 을 실행하세요");
+      return null;
+    }
+    const v=await res.json().catch(()=>null);
+    return (typeof v==="string"&&v)?v:null;
+  }catch(e){ return null; }
+}
+
 async function dbSaveStudent(s){
   if(!USE_DB()||!SB_URL||!SB_KEY) return;
   try {
@@ -1109,6 +1234,7 @@ async function dbSaveStudent(s){
       score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
       logs:Array.isArray(s.logs)?s.logs:[],
       supports:Array.isArray(s.supports)?s.supports:[],
+      append_only:(!isAuthed()&&!!s._fromServer),   // 서버 기록을 덮지 말고 뒤에 붙이라는 표시
       updated_at:new Date().toISOString()
     };
     const res = isAuthed()
@@ -1132,11 +1258,11 @@ async function dbSaveStudent(s){
       console.warn("[UNION+] 학생 저장 실패:", res.status, errText);
       // 왜 막혔는지 사람이 읽을 수 있게 남겨둔다
       if(res.status===404&&!isAuthed())
-        S._saveErr="학생 제출 통로가 아직 없어요. 5_학생제출_고치기.sql 을 실행해 주세요.";
+        S._saveErr="학생 제출 통로가 아직 없어요. 5_학생제출_중복방지.sql 을 실행해 주세요.";
       else if(res.status===401||res.status===403)
         S._saveErr=isAuthed()
           ? "서버가 저장을 거부했어요. 보안잠금 SQL(3번)을 확인해 주세요."
-          : "학생 제출이 막혀 있어요. 5_학생제출_고치기.sql 을 실행해 주세요.";
+          : "학생 제출이 막혀 있어요. 5_학생제출_중복방지.sql 을 실행해 주세요.";
       else if(/PGRST204|column/i.test(errText))
         S._saveErr="표에 없는 항목이 있어요. 설치 SQL(1번)을 한 번 더 실행해 컬럼을 맞춰주세요.";
       else if(res.status===404)
@@ -1920,7 +2046,9 @@ function hBars(sc){
 }
 function hTopbar(title,back,extra){back=back===undefined?true:back;let h='<div style="background:rgba(255,255,255,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--b);height:56px;padding:0 20px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10">';if(back)h+='<button id="bk" aria-label="뒤로" style="background:none;border:none;cursor:pointer;color:var(--m);font-size:19px;padding:4px 10px 4px 0;line-height:1">←</button>';h+='<span style="font-size:15.5px;font-weight:800;flex:1;letter-spacing:-.02em">'+title+'</span>';if(extra)h+=extra;h+='</div>';return h;}
 function hSidebar(menuId,bg,accent,who,items){bg=bg||"var(--t)";accent=accent||"var(--p)";let h='<div class="sidebar" style="background:'+bg+'">';h+='<div style="padding:22px 16px 16px">'+hLogo(21,true)+'<div style="font-size:11px;color:#9FA6C0;margin-top:6px;line-height:1.5">'+who+'</div>'
-+(isAuthed()?'<div style="font-size:10px;color:#6B6890;margin-top:4px;word-break:break-all">'+hcv(SB_EMAIL)+'</div>':'')+'<div style="font-size:10px;color:#6B6890;margin-top:3px">'+(S.schoolYear||'2025')+'년도</div></div>';h+='<div style="height:1px;background:#ffffff18;margin:0 16px 8px"></div><nav style="flex:1;padding:4px 0">';items.forEach(item=>{const on=menuId===item.id;h+='<button class="nav-btn'+(on?" on":"")+'" data-menu="'+item.id+'" style="'+(on?"background:"+accent+";color:#fff;":"")+'">';h+='<span style="font-size:16px;width:20px;text-align:center;flex-shrink:0">'+item.icon+'</span><span>'+item.label+'</span></button>';});h+='</nav>'+hSyncBadge()+'<div style="padding:12px 16px;border-top:1px solid #ffffff18"><button id="btn-logout" style="width:100%;padding:9px 0;border-radius:9px;background:#ffffff18;color:#C8C6E8;border:none;font-size:12px;font-weight:600;cursor:pointer">로그아웃</button></div></div>';return h;}
++(isAuthed()?'<div style="font-size:10px;color:#6B6890;margin-top:4px;word-break:break-all">'+hcv(SB_EMAIL)+'</div>':'')+'<div style="font-size:10px;color:#6B6890;margin-top:3px">'+(S.schoolYear||'2025')+'년도</div></div>';h+='<div style="height:1px;background:#ffffff18;margin:0 16px 8px"></div><nav style="flex:1;padding:4px 0">';items.forEach(item=>{const on=menuId===item.id;h+='<button class="nav-btn'+(on?" on":"")+'" data-menu="'+item.id+'" style="'+(on?"background:"+accent+";color:#fff;":"")+'">';h+='<span style="font-size:16px;width:20px;text-align:center;flex-shrink:0">'+item.icon+'</span><span>'+item.label+'</span></button>';});h+='</nav>'+((menuId!==undefined&&daysSinceBackup()>=7&&(S.students||[]).length>0)
+  ?'<div id="backup-nudge" style="margin:10px 12px;padding:9px 11px;border-radius:11px;background:#FFF6E5;border:1.5px solid #F5D48A;cursor:pointer"><div style="font-size:11px;font-weight:800;color:#B8791A">💾 백업한 지 오래됐어요</div><div style="font-size:10px;color:#B8791A;margin-top:3px">눌러서 내려받기</div></div>'
+  :'')+hSyncBadge()+'<div style="padding:12px 16px;border-top:1px solid #ffffff18"><button id="btn-logout" style="width:100%;padding:9px 0;border-radius:9px;background:#ffffff18;color:#C8C6E8;border:none;font-size:12px;font-weight:600;cursor:pointer">로그아웃</button></div></div>';return h;}
 function hLayout(sidebar,content){return'<div class="layout">'+sidebar+'<div class="main">'+content+'</div></div>';}
 function hGradeCls(selG,selC,pfx){let h='<div><label style="display:block;font-size:12px;font-weight:600;color:var(--m);margin-bottom:7px">학년</label><div style="display:flex;gap:6px">';GRADES.forEach(g=>{const on=selG===g;h+='<button class="'+pfx+'gb" data-g="'+g+'" style="flex:1;padding:10px 0;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+g+'</button>';});h+='</div></div><div><label style="display:block;font-size:12px;font-weight:600;color:var(--m);margin-bottom:7px">반</label><div style="display:flex;gap:8px">';CLASSES.forEach(c=>{const on=selC===c;h+='<button class="'+pfx+'cb" data-c="'+c+'" style="flex:1;padding:12px 0;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+(c)+'반</button>';});h+='</div></div>';return h;}
 
@@ -2423,7 +2551,73 @@ function hSyncBadge(){
 
 function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?("전담교사"+(tcName?" · "+tcName:"")):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"📋",label:"설문 관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
 
-function pgSurveyList(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);let body=hTopbar("설문 관리",false,'<button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');body+='<div style="padding:16px 20px;max-width:860px"><div style="font-size:13px;color:var(--m);margin-bottom:12px">'+(tcIsSpecial?"전체 학생":"내 반("+tcGrade+"학년 "+tcCls+"반) 학생")+" · 총 "+my.length+"명</div>";if(!my.length){body+='<div class="card" style="padding:40px;text-align:center;color:var(--m)">등록된 학생이 없어요.</div>';}else{body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">';my.forEach(s=>{body+='<div class="scd" data-id="'+s.id+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px"><div><div style="font-weight:700;font-size:15px">'+s.name+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · '+(s.teacher||"담임 미지정")+'</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span>'+(s.scores?'<span style="font-size:9px;color:#22C79A;font-weight:700">✓ 진단완료</span>':'<span style="font-size:9px;color:#F5A623;font-weight:700">미진단</span>')+'</div></div>';if(s.scores){body+='<div style="display:flex;gap:8px;align-items:center">'+hRadar(s.scores,86)+'<div style="flex:1">';DS.forEach(d=>body+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span style="width:20px;height:14px;border-radius:3px;background:'+DM[d].bg+';color:'+DM[d].c+';font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center">'+d+'</span><div style="flex:1;height:4px;border-radius:2px;background:#F0EFF8;overflow:hidden"><div style="width:'+s.scores[d]+'%;height:100%;background:'+DM[d].c+'"></div></div><span style="font-size:9px;color:var(--m);width:22px;text-align:right">'+s.scores[d]+'</span></div>');body+='</div></div>';}else body+='<div style="height:58px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--m)">진단 미실시</div>';body+='<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--b);display:flex;justify-content:space-between;font-size:10px;color:var(--m)"><span>기록 '+s.logs.length+'건</span><span>'+s.at+'</span></div></div>';});body+='</div>';}body+='</div>';return hLayout(tcSidebar(),body);}
+function pgBulkAdd(){
+  const g=S.tcIsSpecial?(S.bulkGrade||1):S.tcGrade;
+  const c=S.tcIsSpecial?(S.bulkCls||1):S.tcCls;
+  const parsed=S.bulkText?parseRoster(S.bulkText,g,c):null;
+  const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
+
+  let body=hTopbar("학생 한 번에 등록",true)+'<div style="padding:16px 20px;max-width:720px">';
+
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div class="eyebrow">붙여넣기</div>';
+  body+='<div style="font-size:14px;font-weight:800;margin-top:3px;letter-spacing:-.02em">명단을 그대로 붙여넣으세요</div>';
+  body+='<div style="font-size:11.5px;color:var(--m);margin-top:5px;line-height:1.7">한 줄에 한 명씩이면 됩니다. 나이스나 엑셀에서 복사해 붙여넣어도 알아서 읽어요.<br>출석번호·출신국가·학생유형이 같이 있어도 괜찮습니다.</div>';
+
+  if(S.tcIsSpecial){
+    body+='<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">';
+    body+='<span style="font-size:12px;font-weight:700">학년</span>';
+    body+='<select id="bulk-grade" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:13px;color:var(--t);font-family:inherit;cursor:pointer">'
+      +GRADES.map(x=>'<option value="'+x+'"'+(g===x?" selected":"")+'>'+x+'학년</option>').join("")+'</select>';
+    body+='<span style="font-size:12px;font-weight:700;margin-left:6px">반</span>';
+    body+='<select id="bulk-cls" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:13px;color:var(--t);font-family:inherit;cursor:pointer">'
+      +CLASSES.map(x=>'<option value="'+x+'"'+(c===x?" selected":"")+'>'+x+'반</option>').join("")+'</select></div>';
+  }else{
+    body+='<div style="margin-top:12px;padding:9px 12px;border-radius:10px;background:var(--pl);font-size:12px;font-weight:700;color:var(--p)">'+g+'학년 '+c+'반으로 등록됩니다</div>';
+  }
+
+  body+='<textarea id="bulk-text" rows="10" placeholder="김철수&#10;이영희&#10;응웬티&#10;&#10;또는&#10;1&#9;김철수&#10;2&#9;이영희&#9;베트남&#9;외국인가정" style="width:100%;margin-top:11px;padding:13px 15px;border-radius:13px;border:1.5px solid var(--b);background:var(--bg);font-size:14px;color:var(--t);outline:none;resize:vertical;line-height:1.9;font-family:inherit">'+hcv(S.bulkText||"")+'</textarea>';
+  body+='<button id="btn-bulk-check" class="btn-p" style="margin-top:10px">명단 확인하기</button>';
+  body+='</div>';
+
+  if(parsed){
+    const nw=parsed.rows.filter(r=>!exist.has(r.name+"|"+r.grade+"|"+r.cls));
+    const dup=parsed.rows.filter(r=>exist.has(r.name+"|"+r.grade+"|"+r.cls));
+    body+='<div class="card">';
+    body+='<div style="font-size:13.5px;font-weight:800;margin-bottom:4px">읽어낸 명단 '+parsed.rows.length+'명</div>';
+    body+='<div style="font-size:11.5px;color:var(--m);margin-bottom:13px">새로 등록 '+nw.length+'명'
+      +(dup.length?(' · 이미 있음 '+dup.length+'명(건너뜀)'):'')
+      +(parsed.bad.length?(' · 못 읽음 '+parsed.bad.length+'줄'):'')+'</div>';
+
+    if(nw.length){
+      body+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+      nw.forEach((r,i)=>{
+        body+='<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:10px;background:var(--bg)">';
+        body+='<span style="font-size:11px;color:var(--m);font-weight:700;width:22px;flex-shrink:0">'+(r.no!==null?r.no:(i+1))+'</span>';
+        body+='<span style="font-size:13.5px;font-weight:800;flex:1">'+hcv(r.name)+'</span>';
+        body+='<span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:8px;background:var(--s);color:var(--m)">'+hFlag(r.country)+' '+hcv(r.country)+'</span>';
+        body+='<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;background:'+(STY_C[r.stype]||"#8A8FA3")+'1A;color:'+(STY_C[r.stype]||"#8A8FA3")+'">'+hcv(r.stype)+'</span>';
+        body+='</div>';
+      });
+      body+='</div>';
+    }
+    if(dup.length){
+      body+='<div style="padding:10px 12px;border-radius:10px;background:#FFF6E5;font-size:11.5px;color:#8A6414;line-height:1.7;margin-bottom:10px">이미 등록된 학생은 건너뜁니다 · '+hcv(dup.map(r=>r.name).join(", "))+'</div>';
+    }
+    if(parsed.bad.length){
+      body+='<div style="padding:10px 12px;border-radius:10px;background:#FFF0F3;font-size:11.5px;color:#C2334C;line-height:1.7;margin-bottom:10px">읽지 못한 줄 · '
+        +parsed.bad.slice(0,5).map(b=>b.line+"행: "+hcv(b.raw.slice(0,24))).join("<br>")+(parsed.bad.length>5?"<br>외 "+(parsed.bad.length-5)+"줄":"")+'</div>';
+    }
+    if(nw.length)body+='<button id="btn-bulk-save" class="btn-p">'+nw.length+'명 등록하기</button>';
+    else body+='<div style="font-size:12px;color:var(--m);text-align:center;padding:10px 0">새로 등록할 학생이 없어요.</div>';
+    body+='</div>';
+  }
+
+  body+='</div>';
+  return hLayout(tcSidebar(),body);
+}
+
+function pgSurveyList(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);let body=hTopbar("설문 관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');body+='<div style="padding:16px 20px;max-width:860px"><div style="font-size:13px;color:var(--m);margin-bottom:12px">'+(tcIsSpecial?"전체 학생":"내 반("+tcGrade+"학년 "+tcCls+"반) 학생")+" · 총 "+my.length+"명</div>";if(!my.length){body+='<div class="card" style="padding:34px 24px;text-align:center"><div style="color:var(--m);font-size:13px;margin-bottom:14px;line-height:1.7">등록된 학생이 없어요.<br>명단을 붙여넣으면 한 번에 등록할 수 있어요.</div><button id="btn-bulk2" class="btn-p" style="max-width:260px;margin:0 auto">명단 붙여넣어 등록하기</button></div>';}else{body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">';my.forEach(s=>{body+='<div class="scd" data-id="'+s.id+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px"><div><div style="font-weight:700;font-size:15px">'+s.name+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · '+(s.teacher||"담임 미지정")+'</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span>'+(s.scores?'<span style="font-size:9px;color:#22C79A;font-weight:700">✓ 진단완료</span>':'<span style="font-size:9px;color:#F5A623;font-weight:700">미진단</span>')+'</div></div>';if(s.scores){body+='<div style="display:flex;gap:8px;align-items:center">'+hRadar(s.scores,86)+'<div style="flex:1">';DS.forEach(d=>body+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span style="width:20px;height:14px;border-radius:3px;background:'+DM[d].bg+';color:'+DM[d].c+';font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center">'+d+'</span><div style="flex:1;height:4px;border-radius:2px;background:#F0EFF8;overflow:hidden"><div style="width:'+s.scores[d]+'%;height:100%;background:'+DM[d].c+'"></div></div><span style="font-size:9px;color:var(--m);width:22px;text-align:right">'+s.scores[d]+'</span></div>');body+='</div></div>';}else body+='<div style="height:58px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--m)">진단 미실시</div>';body+='<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--b);display:flex;justify-content:space-between;font-size:10px;color:var(--m)"><span>기록 '+s.logs.length+'건</span><span>'+s.at+'</span></div></div>';});body+='</div>';}body+='</div>';return hLayout(tcSidebar(),body);}
 
 function pgClassView(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);const label=tcIsSpecial?"전체 학생 현황":(tcGrade+"학년 "+tcCls+"반 학급 현황");let body=hTopbar("학급 현황",false);const st=[{lb:"전체",v:my.length,c:"var(--p)"},{lb:"진단완료",v:my.filter(s=>s.scores).length,c:"#22C79A"},{lb:"기록있음",v:my.filter(s=>s.logs.length>0).length,c:"#F27A50"},{lb:"미진단",v:my.filter(s=>!s.scores).length,c:"#F5A623"}];body+='<div style="padding:16px 20px;max-width:900px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';st.forEach(s=>body+='<div class="card" style="padding:11px 14px"><div style="font-size:20px;font-weight:800;color:'+s.c+';line-height:1.1">'+s.v+'</div><div style="font-size:10px;color:var(--m);margin-top:2px">'+s.lb+'</div></div>');body+='</div>'+((!S.tcIsSpecial&&my.length>0)?hCompareChart(my,S.students,tcGrade+'학년 '+tcCls+'반'):'')+hFreq(my,label)+hRosterFilter()+hClassRoster(applyFilter(my))+'</div>';return hLayout(tcSidebar(),body);}
 
@@ -2950,6 +3144,47 @@ function pgAdmin(){
     if(S.pwChange&&S.pwChange.msg)body+='<div style="font-size:12px;color:'+(S.pwChange.ok?"var(--g)":"var(--d)")+';font-weight:600">'+S.pwChange.msg+'</div>';
     body += '<button id="btn-pw-change" class="btn-p">비밀번호 변경</button></div></div>';
 
+    // ── 백업 ──
+    {
+      const d=daysSinceBackup(), never=!lastBackup();
+      const warn=d>=7;
+      const cnt=(S.students||[]).length;
+      const rounds=(S.students||[]).reduce((a,s)=>a+((s.scoreHistory||[]).length||(s.scores?1:0)),0);
+      body += '<div class="card"'+(warn?' style="border:1.5px solid #F5D48A;background:#FFFBF0"':'')+'>';
+      body += '<div style="font-size:13px;font-weight:800;'+(warn?'color:#B8791A;':'')+'margin-bottom:5px">'+(warn?'⚠️ ':'')+'데이터 백업</div>';
+      body += '<div style="font-size:11.5px;color:'+(warn?'#8A6414':'var(--m)')+';line-height:1.7;margin-bottom:10px">'
+        +(never?'아직 한 번도 백업하지 않았어요.'
+               :(d===0?'오늘 백업했어요.':d+'일 전에 백업했어요.'))
+        +'<br>Supabase 무료 요금제는 <strong>자동 백업이 없습니다.</strong> 프로젝트가 잠기거나 지워지면 되살릴 수 없어요. 주 1회는 내려받아 두세요.</div>';
+      body += '<div style="font-size:11px;color:var(--m);margin-bottom:11px">지금 담긴 것 · 학생 '+cnt+'명 · 진단 '+rounds+'회</div>';
+      body += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      body += '<button id="btn-backup" style="flex:1;min-width:150px;padding:11px 0;border-radius:11px;border:none;background:'+(warn?'#F5A623':'var(--p)')+';color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">💾 백업 파일 내려받기</button>';
+      body += '<button id="btn-restore" style="flex:1;min-width:150px;padding:11px 0;border-radius:11px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:12.5px;font-weight:700;cursor:pointer">📂 백업에서 되살리기</button>';
+      body += '<input id="restore-file" type="file" accept=".json,application/json" style="display:none"/>';
+      body += '</div></div>';
+    }
+
+    // ── 중복 학생 ──
+    {
+      const g={};
+      (S.students||[]).forEach(s=>{
+        const k=String(s.name).trim()+"|"+s.grade+"|"+s.cls;
+        (g[k]=g[k]||[]).push(s);
+      });
+      const dups=Object.values(g).filter(a=>a.length>1);
+      if(dups.length){
+        body += '<div class="card" style="border:1.5px solid #F5D48A;background:#FFFBF0">';
+        body += '<div style="font-size:13px;font-weight:800;color:#B8791A;margin-bottom:6px">같은 학생이 여러 번 등록돼 있어요 · '+dups.length+'명</div>';
+        body += '<div style="font-size:11.5px;color:#8A6414;line-height:1.7;margin-bottom:11px">기기를 옮겨가며 설문할 때 생깁니다. 합치면 진단 기록이 한 명으로 모이고, 회차 순서대로 정렬됩니다.</div>';
+        dups.slice(0,8).forEach(a=>{
+          const rounds=a.reduce((n,s)=>n+((s.scoreHistory||[]).length||(s.scores?1:0)),0);
+          body += '<div style="font-size:11.5px;color:#8A6414;margin-bottom:5px">· '+hcv(a[0].name)+' ('+a[0].grade+'-'+a[0].cls+') — '+a.length+'건, 진단 '+rounds+'회</div>';
+        });
+        if(dups.length>8)body += '<div style="font-size:11px;color:#8A6414;margin-bottom:5px">외 '+(dups.length-8)+'명</div>';
+        body += '<button id="btn-merge-dup" style="margin-top:8px;padding:10px 18px;border-radius:11px;border:none;background:#F5A623;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">중복 학생 합치기</button></div>';
+      }
+    }
+
     // ── 전송 대기 ──
     {
       const pend=loadPending();
@@ -3234,6 +3469,7 @@ function render(){
     else if(menu==="resource")      h=pgResource();
     else if(menu==="admin")          h=pgAdmin();
     else if(menu==="detail")        h=pgDetail();
+    else if(menu==="bulkAdd")       h=pgBulkAdd();
     else if(menu==="formAdd")       h=pgForm("add");
     else if(menu==="formEdit")      h=pgForm("edit");
     else if(menu==="svStart")       h=pgSvStart();
@@ -3293,6 +3529,7 @@ function bindEv(){
   const onA=(sel,fn)=>document.querySelectorAll(sel).forEach(el=>el.addEventListener("click",fn));
 
   // 공통
+  on("backup-nudge",()=>set({menu:"admin"}));
   on("sync-badge",()=>{
     if(!USE_DB()){ set({menu:"admin"}); toast("관리자 메뉴에서 DB를 연결해 주세요."); return; }
     toast("🔄 학교 데이터를 불러오는 중...");
@@ -3403,9 +3640,30 @@ function bindEv(){
       if(!name){S.stuNameErr="이름을 입력해주세요.";render();setTimeout(()=>{const el=document.getElementById("stu-name");if(el)el.focus();},30);return;}
       const grade=S.stuGrade,cls=S.stuCls;
       if(!cls){toast("반을 선택해주세요.");return;}
-      // 학생 찾기 (DB 동기화 없이 바로 - 교사가 미리 등록한 경우)
-      let found=S.students.find(s=>s.name===name&&Number(s.grade)===grade&&Number(s.cls)===cls);
-      if(!found){found={id:uid(),name,grade,cls,teacher:"",country:"대한민국",stype:"일반학생",at:td(),scores:null,scoreHistory:[],logs:[],supports:[]};S.students=[...S.students,found];saveSt(S.students);}
+      // ① 이 기기에 이미 있나
+      let found=S.students.find(s=>String(s.name).trim()===name&&Number(s.grade)===grade&&Number(s.cls)===cls);
+
+      // ② 없으면 서버에 물어본다 (기기를 바꿔도 같은 사람으로 이어지도록)
+      if(!found&&USE_DB()){
+        const btn=document.getElementById("btn-stu-go");
+        if(btn){btn.disabled=true;btn.textContent="확인하는 중...";}
+        const sid0=await dbFindStudentId(name,grade,cls);
+        if(btn){btn.disabled=false;btn.textContent="설문 시작하기";}
+        if(sid0){
+          // 서버에 있던 학생 — 껍데기만 만들어 이어붙인다.
+          // 점수·기록은 읽을 수 없으므로 제출할 때 서버에서 합쳐진다.
+          found={id:sid0,name,grade,cls,teacher:"",country:"대한민국",stype:"일반학생",
+                 at:td(),scores:null,scoreHistory:[],logs:[],supports:[],_fromServer:true};
+          S.students=[...S.students,found];saveSt(S.students);
+        }
+      }
+
+      // ③ 그래도 없으면 새 학생
+      if(!found){
+        found={id:uid(),name,grade,cls,teacher:"",country:"대한민국",stype:"일반학생",
+               at:td(),scores:null,scoreHistory:[],logs:[],supports:[]};
+        S.students=[...S.students,found];saveSt(S.students);
+      }
       set({sid:found.id,page:"student",menu:"svStart",sAns:{},sQ:0,stuNameErr:""});
     };
     on("btn-stu-go",go);
@@ -3472,7 +3730,41 @@ function bindEv(){
         });
       });
     });
+    on("btn-bulk",()=>set({menu:"bulkAdd",bulkText:""}));
+    on("btn-bulk2",()=>set({menu:"bulkAdd",bulkText:""}));
     onA(".scd",e=>{set({sid:e.currentTarget.dataset.id,menu:"detail",lAuth:S.tcIsSpecial?"전담교사":"담임교사",lTags:[],lMemo:"",neisText:""});});
+  }
+
+  // ── 학생 한 번에 등록 ──
+  if(page==="teacher"&&menu==="bulkAdd"){
+    on("bk",()=>set({menu:"survey"}));
+    const gsel=document.getElementById("bulk-grade"),csel=document.getElementById("bulk-cls");
+    if(gsel)gsel.addEventListener("change",()=>{S.bulkGrade=Number(gsel.value);});
+    if(csel)csel.addEventListener("change",()=>{S.bulkCls=Number(csel.value);});
+    on("btn-bulk-check",()=>{
+      const ta=document.getElementById("bulk-text");
+      const t=ta?ta.value:"";
+      if(!t.trim()){toast("명단을 붙여넣어 주세요.");return;}
+      set({bulkText:t});
+    });
+    on("btn-bulk-save",async()=>{
+      const g=S.tcIsSpecial?(S.bulkGrade||1):S.tcGrade;
+      const c=S.tcIsSpecial?(S.bulkCls||1):S.tcCls;
+      const {rows}=parseRoster(S.bulkText,g,c);
+      const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
+      const add=rows.filter(r=>!exist.has(r.name+"|"+r.grade+"|"+r.cls))
+        .map(r=>({id:uid(),name:r.name,grade:r.grade,cls:r.cls,teacher:S.tcName||"",
+          country:r.country,stype:r.stype,at:td(),scores:null,scoreHistory:[],logs:[],supports:[]}));
+      if(!add.length){toast("새로 등록할 학생이 없어요.");return;}
+      const next=[...S.students,...add];
+      set({students:next,menu:"survey",bulkText:""});
+      saveSt(next);
+      toast(add.length+"명을 등록했어요. 서버에 올리는 중...");
+      let failN=0;
+      for(const s of add){ if(await dbSaveStudent(s)===false)failN++; }
+      toast(failN?("⚠️ "+(add.length-failN)+"명 저장, "+failN+"명 실패"):("✅ "+add.length+"명 등록 완료"));
+      set({});
+    });
   }
 
   // ── 학급 현황 : 학생 명단 자세히보기 ──
@@ -3880,6 +4172,86 @@ function bindEv(){
         if(n1v!==n2v){set({pwChange:{ok:false,msg:"❌ 새 비밀번호가 일치하지 않아요."}});return;}
         localStorage.setItem("union_pw_v1",n1v);
         set({pwChange:{ok:true,msg:"✅ 비밀번호가 변경됐어요!"}});
+      });
+      on("btn-backup",()=>{
+        const c=downloadBackup();
+        toast("💾 백업 완료 · 학생 "+c.students+"명, 진단 "+c.rounds+"회");
+        set({});
+      });
+      on("btn-restore",()=>{
+        const f=document.getElementById("restore-file");
+        if(f)f.click();
+      });
+      {
+        const f=document.getElementById("restore-file");
+        if(f)f.addEventListener("change",()=>{
+          const file=f.files&&f.files[0];
+          if(!file)return;
+          const rd=new FileReader();
+          rd.onload=()=>{
+            let data;
+            try{ data=JSON.parse(String(rd.result)); }
+            catch(e){ toast("파일을 읽지 못했어요. JSON 백업 파일인지 확인해 주세요."); return; }
+            let res;
+            try{ res=mergeBackup(data); }
+            catch(e){ toast(e.message); return; }
+            showDelModal("…백업을 불러와 지금 데이터와 합칠까요? 새로 "+res.added+"명, 겹치는 "+res.merged+"명입니다.", async()=>{
+              set({students:res.students});
+              saveSt(res.students);
+              if(USE_DB()){
+                toast("서버에도 올리는 중...");
+                for(const s of res.students){ await dbSaveStudent(s).catch(()=>{}); }
+              }
+              toast("✅ 되살렸어요 · 새로 "+res.added+"명, 합친 "+res.merged+"명");
+              set({});
+            });
+            f.value="";
+          };
+          rd.readAsText(file);
+        });
+      }
+      on("btn-merge-dup",()=>{
+        showDelModal("…같은 학생으로 보이는 기록을 합칠까요? 진단 회차는 모두 보존됩니다.", async()=>{
+          const g={};
+          (S.students||[]).forEach(s=>{const k=String(s.name).trim()+"|"+s.grade+"|"+s.cls;(g[k]=g[k]||[]).push(s);});
+          const keep=[],drop=[];
+          Object.values(g).forEach(a=>{
+            if(a.length===1){keep.push(a[0]);return;}
+            // 가장 먼저 등록된 기록을 기준으로 삼는다
+            a.sort((x,y)=>String(x.at||"").localeCompare(String(y.at||"")));
+            const base=a[0];
+            let hist=[],logs=[],sups=[];
+            a.forEach(s=>{
+              hist=hist.concat((s.scoreHistory&&s.scoreHistory.length)?s.scoreHistory:(s.scores?[{date:s.at,scores:s.scores}]:[]));
+              logs=logs.concat(s.logs||[]);
+              sups=sups.concat(s.supports||[]);
+            });
+            // 같은 날 같은 점수는 한 번만
+            const seen=new Set(),h2=[];
+            hist.sort((x,y)=>String(x.date||"").localeCompare(String(y.date||"")));
+            hist.forEach(r=>{const k2=(r.date||"")+"|"+SUBS.map(k3=>(subScores(r.scores)||{})[k3]).join(",");
+              if(!seen.has(k2)){seen.add(k2);h2.push(r);}});
+            const seenL=new Set(),l2=[];
+            logs.forEach(l=>{const k2=(l.date||"")+"|"+(l.author||"")+"|"+(l.memo||"");
+              if(!seenL.has(k2)){seenL.add(k2);l2.push(l);}});
+            keep.push({...base,
+              // 비어 있지 않은 정보를 우선 살린다
+              teacher:a.map(s=>s.teacher).find(v=>v)||"",
+              country:a.map(s=>s.country).find(v=>v&&v!=="대한민국")||base.country||"대한민국",
+              stype:a.map(s=>s.stype).find(v=>v&&v!=="일반학생")||base.stype||"일반학생",
+              tcNote:a.map(s=>s.tcNote).find(v=>v)||"",
+              teamFb:a.map(s=>s.teamFb).find(v=>v)||null,
+              scoreHistory:h2, scores:h2.length?h2[h2.length-1].scores:null,
+              logs:l2, supports:sups});
+            a.slice(1).forEach(s=>drop.push(s.id));
+          });
+          set({students:keep});
+          saveSt(keep);
+          for(const s of keep)await dbSaveStudent(s).catch(()=>{});
+          for(const id of drop)await dbDeleteStudent(id).catch(()=>{});
+          toast("중복 "+drop.length+"건을 합쳤어요. 학생 "+keep.length+"명이 남았어요.");
+          set({});
+        });
       });
       on("btn-flush",async()=>{
         toast("다시 보내는 중...");
