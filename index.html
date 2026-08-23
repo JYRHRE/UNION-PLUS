@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-01"/>
+<meta name="app-version" content="2026-08-23-02"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-01";
+const APP_VERSION = "2026-08-23-02";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -2753,97 +2753,107 @@ function pgSurvey(){
 
 function pgResult(){
   const s=S.students.find(x=>x.id===S.sid);if(!s||!s.scores)return"";
-  const sorted=Object.entries(s.scores).sort(([,a],[,b])=>b-a);
-  const best=sorted[0][0],wk=sorted[sorted.length-1][0];
-  const avg=Math.round(Object.values(s.scores).reduce((a,b)=>a+b,0)/DS.length);
+  const r=subScores(s.scores)||{};
+  // 6개 하위영역 기준으로 정렬한다. 예전에는 s.scores 를 통째로 정렬해서
+  // 상위영역(인지·정의·행동)까지 섞여 들어가 화면이 깨졌다.
+  const sorted=SUBS.map(k=>[k,Number(r[k])||0]).sort((a,b)=>b[1]-a[1]);
+  const best=sorted[0][0], wk=sorted[sorted.length-1][0];
+  const avg=totSc(s.scores);
   const isT=S.role==="teacher";
   const isStudent=!isT;
 
-  const domainGrads={
-    인지:"linear-gradient(135deg,#6C63FF,#B97AFF)",
-    정의:"linear-gradient(135deg,#FF6B9D,#FF9F51)",
-    행동:"linear-gradient(135deg,#2DD4A0,#4EA8FF)"
-  };
-  const domainIcons={인지:"🧠",정의:"❤️",행동:"🤝"};
-  const msgs={
-    인지:["다양한 문화를 잘 이해해요! 🌍","세상을 넓게 보는 눈이 있어요 ✨"],
-    정의:["친구의 마음을 잘 이해해요! 💕","따뜻한 마음씨를 가졌어요 🌸"],
-    행동:["함께하는 것을 좋아해요! 🤝","협력하는 힘이 넘쳐요 🚀"]
+  const MSG={
+    "정체성 인식":"나를 소중히 여기는 마음이 자라고 있어요 🌱",
+    "문화 다양성 이해":"넓은 세상을 보는 눈이 있어요 🌍",
+    "편견 인식 및 공감":"친구 마음을 잘 헤아려요 💕",
+    "평등 기반 존중 태도":"모두를 똑같이 소중히 대해요 🤍",
+    "문화 간 소통":"누구와도 잘 이야기해요 💬",
+    "공존 실천 및 협력":"함께하는 힘이 있어요 🤝"
   };
 
   let body="";
   if(isStudent){
     body='<div style="min-height:100vh;background:linear-gradient(160deg,#FFF5F9 0%,#F0EEFF 50%,#F5FFF9 100%)">';
-    // 상단 축하 배너
     body+='<div style="background:linear-gradient(135deg,#FF9F51,#FF6B9D,#B97AFF);padding:36px 20px 52px;text-align:center;position:relative;overflow:hidden">';
     body+='<div style="position:absolute;top:-20px;left:-20px;width:100px;height:100px;border-radius:50%;background:rgba(255,255,255,.1)"></div>';
     body+='<div style="position:absolute;bottom:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08)"></div>';
     body+='<div style="font-size:62px;display:block" class="pop">🏆</div>';
-    body+='<div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px">다 했어요! 대단해요!</div>';
+    body+='<div style="font-size:22px;font-weight:900;color:#fff;margin-top:8px">잘 제출했어요!</div>';
     body+='<div style="font-size:13px;color:rgba(255,255,255,.85);margin-top:6px">'+gg(s.grade)+' · 전체 평균 <strong>'+avg+'점</strong></div>';
     body+='</div>';
-    // 점수 카드
+
     body+='<div style="padding:20px;margin-top:-20px">';
-    body+='<div style="display:flex;justify-content:center;margin-bottom:20px">'+hRadar(s.scores,220,true)+'</div>';
-    body+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">';
-    DS.forEach(d=>{
-      const score=s.scores[d];
-      const isGood=score>=75,isWeak=score<60;
-      body+='<div style="background:'+domainGrads[d]+';border-radius:18px;padding:16px 8px;color:#fff;text-align:center;position:relative;overflow:hidden">';
-      
-      body+='<div style="font-size:12px;opacity:.85;font-weight:700">'+DM[d].k+'</div>';
-      body+='<div style="font-size:38px;font-weight:900;margin:4px 0;line-height:1">'+score+'</div>';
-      body+='<div style="font-size:10px;background:rgba(255,255,255,.25);padding:2px 8px;border-radius:20px;display:inline-block">'+(isGood?"🌟 훌륭해요":isWeak?"💪 더 해봐요":"📈 잘하고 있어요")+'</div>';
+    body+='<div style="display:flex;justify-content:center;margin-bottom:20px">'+hRadar(s.scores,230,true)+'</div>';
+
+    body+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:16px">';
+    SUBS.forEach(k=>{
+      const v=Number(r[k])||0;
+      const isGood=v>=75,isWeak=v<60;
+      body+='<div style="background:'+SUBM[k].c+';border-radius:18px;padding:14px 10px;color:#fff;text-align:center">';
+      body+='<div style="font-size:11px;opacity:.9;font-weight:700;line-height:1.35;min-height:29px;display:flex;align-items:center;justify-content:center">'+hcv(k)+'</div>';
+      body+='<div style="font-size:32px;font-weight:900;margin:3px 0;line-height:1">'+v+'</div>';
+      body+='<div style="font-size:9.5px;background:rgba(255,255,255,.25);padding:2px 8px;border-radius:20px;display:inline-block">'+(isGood?"🌟 훌륭해요":isWeak?"💪 더 해봐요":"📈 잘하고 있어요")+'</div>';
       body+='</div>';
     });
     body+='</div>';
-    // 강점 카드
+
     body+='<div style="background:#fff;border-radius:18px;padding:20px;margin-bottom:12px;border:1px solid var(--b)">';
-    
-    body+='<div style="font-size:12px;font-weight:800;color:'+DM[best].c+';margin-bottom:4px">내 강점이에요</div>';
-    body+='<div style="font-size:18px;font-weight:900;color:var(--t)">'+best+'('+DM[best].k+') · '+s.scores[best]+'점</div>';
-    body+='<div style="font-size:13px;color:var(--m);margin-top:8px;line-height:1.6">'+(msgs[best]?msgs[best][0]:"강점을 잘 살려봐요!")+'</div>';
+    body+='<div style="font-size:12px;font-weight:800;color:'+SUBM[best].c+';margin-bottom:4px">내가 제일 잘하는 것</div>';
+    body+='<div style="font-size:17px;font-weight:900;color:var(--t);line-height:1.4">'+hcv(best)+' · '+sorted[0][1]+'점</div>';
+    body+='<div style="font-size:13px;color:var(--m);margin-top:8px;line-height:1.6">'+(MSG[best]||"강점을 잘 살려봐요!")+'</div>';
     body+='</div>';
-    // 이전 대비 변화
+
     const hist=s.scoreHistory||[];
     if(hist.length>=2){
-      const prev=hist[hist.length-2].scores;
+      const prev=subScores(hist[hist.length-2].scores)||{};
       body+='<div style="background:#fff;border-radius:18px;padding:20px;margin-bottom:12px;border:1px solid var(--b)">';
       body+='<div style="font-size:14px;font-weight:800;color:var(--t);margin-bottom:14px">저번이랑 비교</div>';
       body+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
-      DS.forEach(d=>{
-        const diff=s.scores[d]-prev[d];
+      SUBS.forEach(k=>{
+        const now=Number(r[k])||0, was=Number(prev[k])||0, diff=now-was;
         const arrow=diff>0?"↑":diff<0?"↓":"→";
-        const col=diff>0?"#2DD4A0":diff<0?"#FF5C87":"#9B92C8";
-        body+='<div style="background:'+DM[d].bg+';border-radius:16px;padding:10px;text-align:center">';
-        body+='<div style="font-size:10px;font-weight:800;color:'+DM[d].c+';margin-bottom:4px">'+domainIcons[d]+' '+d+'</div>';
-        body+='<div style="font-size:24px;font-weight:900;color:'+col+'">'+arrow+(diff!==0?Math.abs(diff):"")+'</div>';
-        body+='<div style="font-size:9px;color:'+DM[d].c+';margin-top:2px">'+prev[d]+'→'+s.scores[d]+'</div>';
+        const col=diff>0?"#12A47C":diff<0?"#E8445A":"#8B87A6";
+        body+='<div style="background:'+SUBM[k].bg+';border-radius:16px;padding:10px 6px;text-align:center">';
+        body+='<div style="font-size:9.5px;font-weight:800;color:'+SUBM[k].c+';margin-bottom:4px;line-height:1.3">'+hcv(SUBM[k].s)+'</div>';
+        body+='<div style="font-size:22px;font-weight:900;color:'+col+'">'+arrow+(diff!==0?Math.abs(diff):"")+'</div>';
+        body+='<div style="font-size:9px;color:'+SUBM[k].c+';margin-top:2px">'+was+'→'+now+'</div>';
         body+='</div>';
       });
       body+='</div></div>';
     }
     body+='<button id="btn-result-done" style="width:100%;padding:18px 0;border-radius:22px;border:none;background:linear-gradient(135deg,#6C63FF,#B97AFF);color:#fff;font-size:17px;font-weight:900;cursor:pointer;box-shadow:0 8px 24px rgba(108,99,255,.4);margin-bottom:8px">처음으로 돌아가기 🏠</button>';
     body+='</div></div>';
+
   } else {
-    // 교사용 (기존 유지)
-    const prog={인지:"인지+ 문화이해 지원",정의:"정의+ 감정공감 지원",행동:"행동+ 소통협력 지원"};
+    const _pg=(S.programs&&S.programs.length?S.programs:defPrograms());
+    const progOf=k=>{const p=_pg.find(x=>x.domain===k);return p?p.name:"관련 지원 프로그램";};
     body=hTopbar("진단 결과",false)+'<div style="max-width:520px;margin:0 auto;padding:14px 16px">';
     body+='<div style="text-align:center;padding:18px 0 14px"><div class="pop" style="width:50px;height:50px;border-radius:50%;background:var(--pl);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px">✅</div>';
-    body+='<div style="font-size:16px;font-weight:800">'+s.name+' 학생 진단 완료</div>';
+    body+='<div style="font-size:16px;font-weight:800">'+hcv(s.name)+' 학생 진단 완료</div>';
     body+='<div style="font-size:12px;color:var(--m);margin-top:4px">'+gg(s.grade)+' · 전체 평균 <strong style="color:var(--p)">'+avg+'점</strong></div></div>';
-    body+='<div class="card" style="margin-bottom:9px"><div style="font-size:12px;font-weight:700;margin-bottom:12px">UNION 영역별 점수</div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+hRadar(s.scores,140,true)+'<div style="flex:1;min-width:145px">'+hBars(s.scores)+'</div></div></div>';
-    body+='<div style="background:'+DM[best].bg+';border-radius:14px;padding:14px;margin-bottom:8px"><div style="font-size:9px;font-weight:700;color:'+DM[best].c+';margin-bottom:3px">✨ 강점 영역</div><div style="font-size:13px;font-weight:700;color:'+DM[best].c+'">'+best+'('+DM[best].k+') · '+s.scores[best]+'점</div></div>';
-    if(s.scores[wk]<75)body+='<div style="background:#FFF8F0;border-radius:14px;padding:14px;margin-bottom:8px"><div style="font-size:9px;font-weight:700;color:'+DM[wk].c+';margin-bottom:3px">📌 지원 필요 영역</div><div style="font-size:13px;font-weight:700;color:'+DM[wk].c+'">'+wk+'('+DM[wk].k+') · '+s.scores[wk]+'점</div><div style="margin-top:7px;background:var(--s);border-radius:8px;padding:8px 11px;font-size:11px;border:1px solid var(--b)">🎯 <strong>'+prog[wk]+'</strong>을 추천해요.</div></div>';
+    body+='<div class="card" style="margin-bottom:9px"><div style="font-size:12px;font-weight:700;margin-bottom:12px">영역별 점수</div><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+hRadar(s.scores,150,true)+'<div style="flex:1;min-width:150px">'+hBars(s.scores)+'</div></div></div>';
+    body+='<div style="background:'+SUBM[best].bg+';border-radius:14px;padding:14px;margin-bottom:8px"><div style="font-size:9.5px;font-weight:700;color:'+SUBM[best].c+';margin-bottom:3px">🌟 빛나는 점</div><div style="font-size:13px;font-weight:800;color:'+SUBM[best].c+'">'+hcv(best)+' · '+sorted[0][1]+'점</div></div>';
+    if(sorted[sorted.length-1][1]<75){
+      body+='<div style="background:#FFF8F0;border-radius:14px;padding:14px;margin-bottom:8px"><div style="font-size:9.5px;font-weight:700;color:'+SUBM[wk].c+';margin-bottom:3px">🌱 키워갈 점</div><div style="font-size:13px;font-weight:800;color:'+SUBM[wk].c+'">'+hcv(wk)+' · '+sorted[sorted.length-1][1]+'점</div>';
+      body+='<div style="margin-top:7px;background:var(--s);border-radius:8px;padding:8px 11px;font-size:11px;border:1px solid var(--b)">🎯 <strong>'+hcv(progOf(wk))+'</strong>을 추천해요.</div></div>';
+    }
     const hist3=s.scoreHistory||[];
-    if(hist3.length>=2){const p3=hist3[hist3.length-2].scores;body+='<div class="card" style="margin-bottom:9px"><div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--m)">📈 이전 진단 대비 변화</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';DS.forEach(d=>{const diff=s.scores[d]-p3[d];const arrow=diff>0?"↑":diff<0?"↓":"→";const col=diff>0?"#22C79A":diff<0?"var(--d)":"var(--m)";body+='<div style="background:'+DM[d].bg+';border-radius:10px;padding:8px;text-align:center"><div style="font-size:10px;font-weight:700;color:'+DM[d].c+';margin-bottom:3px">'+d+'</div><div style="font-size:18px;font-weight:800;color:'+col+'">'+arrow+(diff!==0?Math.abs(diff):"")+'</div><div style="font-size:9px;color:'+DM[d].c+';margin-top:1px">'+p3[d]+'→'+s.scores[d]+'</div></div>';});body+='</div></div>';}
-    body+='<button id="btn-result-done" class="btn-p" style="box-shadow:0 4px 12px rgba(108,99,255,.3)">학생 페이지로 →</button></div>';
+    if(hist3.length>=2){
+      const p3=subScores(hist3[hist3.length-2].scores)||{};
+      body+='<div class="card" style="margin-bottom:9px"><div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--m)">📈 이전 진단 대비 변화</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+      SUBS.forEach(k=>{
+        const now=Number(r[k])||0, was=Number(p3[k])||0, diff=now-was;
+        const arrow=diff>0?"↑":diff<0?"↓":"→";
+        const col=diff>0?"#12A47C":diff<0?"var(--d)":"var(--m)";
+        body+='<div style="background:'+SUBM[k].bg+';border-radius:10px;padding:8px 5px;text-align:center"><div style="font-size:9.5px;font-weight:700;color:'+SUBM[k].c+';margin-bottom:3px;line-height:1.3">'+hcv(SUBM[k].s)+'</div><div style="font-size:17px;font-weight:800;color:'+col+'">'+arrow+(diff!==0?Math.abs(diff):"")+'</div><div style="font-size:9px;color:'+SUBM[k].c+';margin-top:1px">'+was+'→'+now+'</div></div>';
+      });
+      body+='</div></div>';
+    }
+    body+='<button id="btn-result-done" class="btn-p">학생 상세로 →</button></div>';
   }
   return isT?hLayout(tcSidebar(),body):body;
 }
 
-
-// ── 관리자 페이지 ─────────────────────────────────────────
 function pgAdmin(){
   const unlocked = S.adminUnlocked;
 
