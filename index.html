@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-09"/>
+<meta name="app-version" content="2026-08-23-10"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-09";
+const APP_VERSION = "2026-08-23-10";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1611,6 +1611,48 @@ function autoAnalysis(s){
   }
   const note=(s.tcNote||"").trim();
   return {strong,grow,acts,trend,note,hi,lo};
+}
+
+// 학생 상세를 열 때 종합의견을 자동으로 만들어 채운다.
+// 이미 만든 게 있으면 다시 부르지 않는다 (요금과 대기시간 절약).
+let _autoBusy=null;
+async function autoNeis(s,force){
+  if(!s||!s.scores)return;
+  const rnd=(s.scoreHistory||[]).length||1;
+  const dr=s.aiDraft;
+  if(!force&&dr&&dr.round===rnd&&dr.text)return;      // 이미 있음
+  if(_autoBusy===s.id)return;                          // 중복 실행 방지
+  _autoBusy=s.id;
+
+  const ld=document.getElementById("neis-loading");
+  if(ld)ld.style.display="flex";
+
+  let text="", mode="auto";
+  try{
+    if(S.apiKey){
+      // 이전 결과가 남아 있으면 실패를 성공으로 오인하므로 먼저 비운다
+      S.neisText="";
+      await genNeis(s);                                // AI 초안
+      text=String(S.neisText||"").trim();
+      if(text)mode="ai";
+    }
+  }catch(e){ /* 아래에서 자동 작성으로 대체 */ }
+
+  if(!text){
+    const a=autoAnalysis(s);
+    if(a)text=[a.strong,a.grow,a.trend,"앞으로 "+a.acts[0]+"와 같은 활동을 이어가면 좋겠습니다."]
+      .filter(Boolean).join(" ");
+  }
+
+  _autoBusy=null;
+  if(!text){ if(ld)ld.style.display="none"; return; }
+
+  const us={...s, aiDraft:{text,round:rnd,mode,at:td()}};
+  S.neisText=text;
+  S.students=S.students.map(x=>x.id===s.id?us:x);
+  saveSt(S.students);
+  dbSaveStudent(us).catch(()=>{});
+  set({});
 }
 
 function hAutoAnalysis(s){
@@ -2728,58 +2770,39 @@ if(hist.length>=1){
   const _extN=(s.logs||[]).filter(l=>EXT_ORGS.some(o=>String(l.author||"").indexOf(o)===0)).length;
   body+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px"><div style="font-size:13px;font-weight:700">교사 협업 기록장</div>'
    +(_extN?'<span style="font-size:11px;font-weight:700;color:#0B7355;background:#E3FAF4;padding:3px 9px;border-radius:20px">🏢 외부기관 기록 '+_extN+'건</span>':'')+'</div>'+hLogInput(lAuth,lTags,lMemo)+hTimeline(s.logs)+'</div>';
-body+='<div class="card" style="border:2px solid #EDE8FF;background:linear-gradient(135deg,#FBF9FF,#FFF5FB)">';
-  body+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
-  body+='<span style="font-size:22px">✍️</span>';
-  body+='<div><div style="font-size:14px;font-weight:800;color:var(--t)">NEIS 학교생활기록부 종합의견</div>';
-  body+='<div style="font-size:11px;color:var(--m);margin-top:2px">직접 작성하거나 AI의 도움을 받을 수 있어요</div></div>';
-  body+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:var(--pl);color:var(--p);margin-left:auto;white-space:nowrap">✨ Claude AI</span></div>';
+// ── NEIS 종합의견 ──────────────────────────────────────
+  // 설정(키·글자수·코치)은 관리자 화면으로 옮겼다.
+  // 여기서는 결과만 보이고, 없으면 알아서 만들어 채운다.
+  {
+    const rnd=(s.scoreHistory||[]).length||(s.scores?1:0);
+    const dr=s.aiDraft||null;
+    const fresh=dr&&dr.round===rnd&&dr.text;
+    const txt=(S.neisText!==undefined&&S.neisText!=="")?S.neisText:(fresh?dr.text:"");
 
-  // 직접 작성 영역
-  body+='<div style="margin-bottom:14px">';
-  body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-  body+='<span style="font-size:12px;font-weight:700;color:var(--t)">종합의견 작성</span>';
-  body+='<span id="char-count" style="font-size:11px;color:var(--m)"></span></div>';
-  body+='<textarea id="neis-draft" rows="7" placeholder="여기에 종합의견을 직접 작성하거나, 아래 AI 생성 버튼을 눌러보세요.&#10;&#10;[작성 예시]&#10;○○은(는) 다양한 문화에 관심을 갖고 친구들과 적극적으로 어울리며..." style="width:100%;padding:12px 14px;border-radius:14px;border:2px solid #EDE8FF;background:#fff;font-size:13px;outline:none;color:var(--t);resize:vertical;line-height:1.8;font-family:inherit;transition:border-color .2s">'+(S.neisText||"")+'</textarea>';
-  body+='<div style="display:flex;gap:7px;margin-top:8px">';
-  body+='<button id="btn-neis-copy" style="flex:1;padding:9px 0;border-radius:10px;border:1.5px solid var(--b);background:var(--s);color:var(--m);font-size:12px;font-weight:600;cursor:pointer">📋 복사</button>';
-  body+='<button id="btn-neis-save" style="flex:2;padding:9px 0;border-radius:10px;border:none;background:var(--p);color:#fff;font-size:12px;font-weight:700;cursor:pointer">💾 기록에 저장</button>';
-  body+='</div></div>';
+    body+='<div class="card">';
+    body+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">';
+    body+='<span style="font-size:19px">✍️</span>';
+    body+='<div style="flex:1"><div class="eyebrow">기록</div>';
+    body+='<div style="font-size:14px;font-weight:800;margin-top:3px;letter-spacing:-.02em">학교생활기록부 종합의견</div></div>';
+    if(fresh)body+='<span style="font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;background:'+(dr.mode==="ai"?"var(--pl)":"var(--bg)")+';color:'+(dr.mode==="ai"?"var(--p)":"var(--m)")+';white-space:nowrap">'+(dr.mode==="ai"?"AI 작성":"자동 작성")+'</span>';
+    body+='</div>';
+    body+='<div style="font-size:11.5px;color:var(--m);margin:5px 0 12px;line-height:1.65">진단 결과와 기록을 바탕으로 자동으로 작성됩니다. 그대로 쓰시거나 고쳐서 쓰세요.</div>';
 
-  // 글자 수 선택
-  body+='<div style="background:#F5F3FF;border-radius:14px;padding:14px;margin-bottom:12px">';
-  body+='<div style="font-size:12px;font-weight:700;color:var(--t);margin-bottom:10px">AI 종합의견 자동 생성</div>';
-  body+='<div style="font-size:11px;color:var(--m);margin-bottom:12px;line-height:1.6">진단 결과와 기록을 분석해서 초안을 만들어드려요.<br>API 키가 없어도 직접 위에서 작성하실 수 있어요.</div>';
-  // 분석 코치 선택
-  const acs=activeCoaches();
-  body+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><span style="font-size:11px;font-weight:700;color:var(--m)">분석 코치</span><button id="btn-go-coach" style="font-size:10.5px;font-weight:700;color:var(--p);background:none;border:none;cursor:pointer;text-decoration:underline">설정하러 가기</button></div>';
-  body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">';
-  const sel0=S.coachSel||"basic";
-  body+='<button class="coachpick" data-c="basic" style="padding:9px 10px;border-radius:10px;font-size:11.5px;font-weight:700;cursor:pointer;text-align:left;border:1.5px solid '+(sel0==="basic"?"var(--p)":"var(--b)")+';background:'+(sel0==="basic"?"var(--pl)":"var(--s)")+';color:'+(sel0==="basic"?"var(--p)":"var(--m)")+'">'+(sel0==="basic"?"● ":"○ ")+'기본 분석</button>';
-  acs.forEach(c=>{const on=sel0===c.id;
-    body+='<button class="coachpick" data-c="'+c.id+'" style="padding:9px 10px;border-radius:10px;font-size:11.5px;font-weight:700;cursor:pointer;text-align:left;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--pl)":"var(--s)")+';color:'+(on?"var(--p)":"var(--m)")+'">'+(on?"● ":"○ ")+hcv(c.name)+'</button>';});
-  body+='</div>';
-  if(!acs.length)body+='<div style="font-size:10.5px;color:var(--m);margin-top:6px;line-height:1.6">관리자 → AI 분석 코치에서 나만의 코치를 만들면 여기에 나타나요.</div>';
-  body+='</div>';
-  body+='<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center"><span style="font-size:11px;font-weight:700;color:var(--m)">글자 수</span>';
-  [200,300,500].forEach(n=>{const on=(S.neisCh||300)===n;body+='<button class="char-opt" data-n="'+n+'" style="flex:1;padding:7px 0;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+n+'자</button>';});
-  body+='</div>';
-  // API 키 입력 (접이식)
-  body+='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--m);margin-bottom:5px">🔑 Anthropic API Key (선택)</div>';
-  body+='<div style="display:flex;gap:6px"><input id="api-key-input" type="password" placeholder="sk-ant-... (없으면 직접 작성해요)" style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid var(--b);background:#fff;font-size:11px;outline:none;color:var(--t);font-family:monospace"/>';
-  body+='<button id="btn-key-save" style="padding:9px 12px;border-radius:10px;background:var(--p);color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">저장</button></div>';
-  body+='<div id="key-status" style="font-size:10px;margin-top:4px;color:var(--m)">'+(S.apiKey?"✅ API 키 저장됨 — AI 다듬기까지 가능해요":"💡 키가 없어도 아래 ‘초안 채우기’로 분석문이 만들어져요")+'</div></div>';
-  body+='<button id="btn-auto-fill" style="width:100%;padding:12px 0;border-radius:12px;border:1.5px solid var(--p);background:#fff;color:var(--p);font-size:13px;font-weight:800;cursor:pointer;margin-bottom:8px">📝 진단 결과로 초안 채우기 (키 없이 바로)</button>';
-  body+='<button id="btn-ai-gen" style="width:100%;padding:12px 0;border-radius:12px;border:none;background:var(--p);color:#fff;font-size:13px;font-weight:800;cursor:pointer">✨ AI로 더 다듬기 (API 키 필요)</button>';
-  body+='</div>';
+    body+='<div id="neis-loading" style="display:'+(fresh||txt?"none":"flex")+';align-items:center;gap:10px;padding:22px 16px;border-radius:13px;background:var(--bg);margin-bottom:11px">';
+    body+='<div style="display:flex;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .2s infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .4s infinite"></div></div>';
+    body+='<span style="font-size:12.5px;color:var(--m);font-weight:600">종합의견을 작성하고 있어요...</span></div>';
 
-  // 로딩
-  body+='<div id="ai-loading" style="display:none;text-align:center;padding:20px 0">';
-  body+='<div style="font-size:28px;margin-bottom:8px">🤖</div>';
-  body+='<div style="font-size:13px;font-weight:700;color:var(--p)">Claude가 종합의견을 쓰고 있어요...</div>';
-  body+='<div style="display:flex;justify-content:center;gap:5px;margin-top:12px"><div style="width:8px;height:8px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out infinite"></div><div style="width:8px;height:8px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .2s infinite"></div><div style="width:8px;height:8px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .4s infinite"></div></div></div>';
-  body+='<div id="ai-error" style="display:none;padding:12px 14px;border-radius:12px;background:#FFF0F3;border:1px solid #F5C2CE;font-size:12px;color:var(--d);line-height:1.6"></div>';
-  body+='</div>';
+    body+='<textarea id="neis-draft" rows="8" placeholder="자동 작성이 끝나면 여기에 나타납니다." style="width:100%;padding:14px 16px;border-radius:13px;border:1.5px solid var(--b);background:#fff;font-size:13.5px;color:var(--t);outline:none;resize:vertical;line-height:1.95;font-family:inherit">'+hcv(txt)+'</textarea>';
+    body+='<div id="neis-count" style="font-size:11px;color:var(--m);text-align:right;margin-top:6px">'+String(txt).length+'자</div>';
+
+    body+='<div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">';
+    body+='<button id="btn-neis-regen" style="flex:1;min-width:120px;padding:11px 0;border-radius:11px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:12.5px;font-weight:700;cursor:pointer">다시 작성</button>';
+    body+='<button id="btn-neis-copy" style="flex:1;min-width:100px;padding:11px 0;border-radius:11px;border:1px solid var(--b);background:var(--s);color:var(--m);font-size:12.5px;font-weight:700;cursor:pointer">복사</button>';
+    body+='<button id="btn-neis-save" style="flex:1.4;min-width:130px;padding:11px 0;border-radius:11px;border:none;background:var(--p);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">기록에 저장</button>';
+    body+='</div>';
+    body+='<div id="ai-error" style="display:none;margin-top:10px;padding:11px 13px;border-radius:11px;background:#FFF0F3;border:1px solid #F5C2CE;font-size:11.5px;color:var(--d);line-height:1.65"></div>';
+    body+='</div>';
+  }
   return hLayout(tcSidebar(),body);
 }
 
@@ -3216,6 +3239,22 @@ function pgAdmin(){
               : '학년·반이 바뀌면 여기서 고쳐주세요.')+'</div></div>';
     body += '<button id="btn-tc-edit" style="padding:9px 16px;border-radius:10px;border:1px solid var(--b);background:var(--s);color:var(--p);font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">정보 수정</button></div></div>';
 
+    // ── AI 설정 ──
+    body += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:5px">AI 종합의견 설정</div>';
+    body += '<div style="font-size:12px;color:var(--m);margin-bottom:14px;line-height:1.65">학생 화면에서는 종합의견이 자동으로 작성됩니다. 여기서 방식만 정해두세요.</div>';
+    body += '<div style="font-size:11.5px;font-weight:700;color:var(--m);margin-bottom:7px">글자 수</div>';
+    body += '<div style="display:flex;gap:7px;margin-bottom:16px">';
+    [200,300,500].forEach(n=>{const on=(S.neisCh||300)===n;
+      body += '<button class="ch-btn" data-ch="'+n+'" style="flex:1;padding:10px 0;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+n+'자</button>';});
+    body += '</div>';
+    body += '<div style="font-size:11.5px;font-weight:700;color:var(--m);margin-bottom:7px">🔑 Anthropic API 키 (선택)</div>';
+    body += '<div style="font-size:11px;color:var(--m);margin-bottom:8px;line-height:1.65">키를 넣으면 AI가 더 자연스럽게 다듬어 줍니다. 없으면 진단 결과를 바탕으로 자동 작성됩니다.<br>Claude 구독과는 별개이며 console.anthropic.com 에서 발급받습니다.</div>';
+    body += '<div style="display:flex;gap:8px"><input id="api-key-input" type="password" placeholder="sk-ant-..." value="'+(S.apiKey?"":"")+'" style="flex:1;padding:11px 14px;border-radius:11px;border:1.5px solid var(--b);background:var(--bg);font-size:13px;color:var(--t);outline:none"/>';
+    body += '<button id="btn-api-save" style="padding:11px 20px;border-radius:11px;border:none;background:var(--p);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">저장</button></div>';
+    body += '<div style="font-size:11.5px;margin-top:8px;color:'+(S.apiKey?"var(--g)":"var(--m)")+';font-weight:600">'+(S.apiKey?"✅ 키가 저장돼 있어요 — AI가 다듬습니다":"키 없이도 자동 작성은 됩니다")+'</div>';
+    if(S.apiKey)body += '<button id="btn-api-clear" style="margin-top:9px;padding:8px 14px;border-radius:9px;border:1px solid var(--b);background:var(--s);color:var(--m);font-size:11.5px;font-weight:700;cursor:pointer">키 지우기</button>';
+    body += '</div>';
+
     // ── AI 분석 코치 ──
     body+='<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:5px">AI 분석 코치 설정</div>';
     body+='<div style="font-size:12px;color:var(--m);margin-bottom:14px;line-height:1.65">선생님의 중점 지도 관점을 미리 학습시켜 두면, AI 종합의견이 그 관점으로 쓰여요. 최대 3개까지 만들 수 있고, <strong>활성화</strong>한 코치만 학생 상세 화면에 나타나요.</div>';
@@ -3418,7 +3457,7 @@ body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div s
   body+='</div>';return hLayout(extSidebar(),body);}
 
 // ── AI 함수 ──────────────────────────────────────────────
-function updCC(){const ta=document.getElementById("neis-draft"),cc=document.getElementById("char-count");if(ta&&cc)cc.textContent=ta.value.length+"자";}
+function updCC(){const ta=document.getElementById("neis-draft"),cc=document.getElementById("neis-count")||document.getElementById("char-count");if(ta&&cc)cc.textContent=ta.value.length+"자";}
 function showAiErr(msg){const el=document.getElementById("ai-error"),ld=document.getElementById("ai-loading");if(el){el.style.display="block";el.textContent="⚠ "+msg;}if(ld)ld.style.display="none";}
 async function genNeis(s){
   const key=S.apiKey.trim();
@@ -3453,6 +3492,7 @@ async function genNeis(s){
     S.neisText=String(text).trim().split(anonId(s)).join(s.name);
     if(ld)ld.style.display="none";if(rw)rw.style.display="block";
     const ta=document.getElementById("neis-draft");if(ta){ta.value=S.neisText;updCC();}
+    const ld2=document.getElementById("neis-loading");if(ld2)ld2.style.display="none";
   }catch(e){if(ld)ld.style.display="none";showAiErr(e.message||"오류가 발생했어요.");}
   finally{if(btn)btn.disabled=false;}
 }
@@ -3863,6 +3903,18 @@ function bindEv(){
     onA(".coachpick",e=>set({coachSel:e.currentTarget.dataset.c}));
     on("btn-go-coach",()=>set({menu:"admin"}));
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
+    // 화면을 연 뒤 종합의견을 자동으로 채운다
+    {
+      const stu0=S.students.find(x=>x.id===sid);
+      if(stu0&&stu0.scores)setTimeout(()=>autoNeis(stu0,false),150);
+    }
+    on("btn-neis-regen",()=>{
+      const stu0=S.students.find(x=>x.id===sid);
+      if(!stu0)return;
+      S.neisText="";
+      toast("다시 작성하고 있어요...");
+      autoNeis(stu0,true);
+    });
     // ── 회차 삭제 ──
     const saveStu=(us)=>{
       set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
@@ -3937,18 +3989,8 @@ function bindEv(){
     const ki=document.getElementById("api-key-input");if(ki)ki.value=S.apiKey||"";
     on("btn-key-save",()=>{const ki2=document.getElementById("api-key-input");const k=ki2?ki2.value.trim():"";S.apiKey=k;localStorage.setItem("union_api_key",k);const st=document.getElementById("key-status");if(st)st.textContent=k?"✅ API 키가 저장됐어요.":"⚠ API 키를 입력해주세요.";});
     onA(".char-opt",e=>{S.neisCh=Number(e.target.dataset.n);document.querySelectorAll(".char-opt").forEach(b=>{const a=Number(b.dataset.n)===S.neisCh;b.style.border="1.5px solid "+(a?"var(--p)":"var(--b)");b.style.background=a?"var(--p)":"var(--s)";b.style.color=a?"#fff":"var(--m)";});});
-    on("btn-auto-fill",()=>{
-      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
-      const a=autoAnalysis(stu);
-      if(!a){toast("진단 결과가 있어야 초안을 만들 수 있어요.");return;}
-      const txt=[a.strong,a.grow,(a.trend||""),"앞으로 "+a.acts[0]+"와 같은 활동을 이어가면 좋겠습니다."]
-        .filter(Boolean).join(" ");
-      S.neisText=txt;
-      const ta=document.getElementById("neis-draft");if(ta)ta.value=txt;
-      const rw=document.getElementById("neis-result");if(rw)rw.style.display="block";
-      set({});toast("진단 결과로 초안을 만들었어요. 다듬어서 쓰세요.");
-    });
-    on("btn-ai-gen",()=>{const s2=S.students.find(x=>x.id===sid);if(s2)genNeis(s2);});
+    // 종합의견은 화면을 열 때 자동으로 채워진다 (autoNeis)
+    
     const ta=document.getElementById("neis-draft");if(ta){ta.addEventListener("input",()=>{S.neisText=ta.value;updCC();});updCC();}
     on("btn-neis-copy",()=>{const ta2=document.getElementById("neis-draft");const t=ta2?ta2.value:"";navigator.clipboard.writeText(t).then(()=>toast("복사됐어요.")).catch(()=>toast("직접 선택해서 복사해주세요."));});
     on("btn-neis-save",()=>{const ta3=document.getElementById("neis-draft");const t=ta3?ta3.value.trim():"";if(!t)return;const lg={id:uid(),date:td(),author:"AI 초안(종합의견)",tags:["NEIS 종합의견"],memo:"[AI 생성 초안]\n"+t};
@@ -4268,6 +4310,18 @@ function bindEv(){
         else toast("⚠️ "+r.sent+"건 성공, "+r.left+"건은 아직 실패예요.");
         await syncFromDB();
         set({});
+      });
+      onA(".ch-btn",e=>set({neisCh:Number(e.currentTarget.dataset.ch)}));
+      on("btn-api-save",()=>{
+        const el=document.getElementById("api-key-input");
+        const v=el?el.value.trim():"";
+        if(!v){toast("키를 입력해 주세요.");return;}
+        S.apiKey=v; try{localStorage.setItem("union_apikey",v);}catch(e){}
+        set({}); toast("API 키를 저장했어요.");
+      });
+      on("btn-api-clear",()=>{
+        S.apiKey=""; try{localStorage.removeItem("union_apikey");}catch(e){}
+        set({}); toast("키를 지웠어요. 자동 작성으로 동작합니다.");
       });
       on("btn-tc-edit",()=>set({page:"tcEnter"}));
       on("btn-force-reload",()=>{
