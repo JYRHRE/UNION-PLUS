@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-10"/>
+<meta name="app-version" content="2026-08-23-11"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-10";
+const APP_VERSION = "2026-08-23-11";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1331,11 +1331,32 @@ async function flushPending(){
   return {sent,left:left.length};
 }
 
+// 지운 학생 목록 — 서버 응답이 늦어도 되살아나지 않게 막는 표식
+const TOMB_KEY="union_deleted_v1";
+function loadTomb(){ try{return JSON.parse(localStorage.getItem(TOMB_KEY)||"[]");}catch(e){return [];} }
+function addTomb(id){ try{const a=loadTomb();if(a.indexOf(id)<0){a.push(id);localStorage.setItem(TOMB_KEY,JSON.stringify(a.slice(-300)));}}catch(e){} }
+function dropTomb(ids){ try{const keep=loadTomb().filter(x=>ids.indexOf(x)>=0);localStorage.setItem(TOMB_KEY,JSON.stringify(keep));}catch(e){} }
+
 async function dbDeleteStudent(id){
-  if(!USE_DB()||!SB_URL||!SB_KEY) return;
-  await fetch(SB_URL+"/rest/v1/students?id=eq."+encodeURIComponent(id),{
-    method:"DELETE",headers:authHeaders()
-  }).catch(()=>{});
+  // 다시 올라오지 않도록 대기열에서도 뺀다
+  try{ savePending(loadPending().filter(x=>x.id!==id)); }catch(e){}
+  addTomb(id);
+  if(!USE_DB()||!SB_URL||!SB_KEY) return true;
+  try{
+    const res=await fetch(SB_URL+"/rest/v1/students?id=eq."+encodeURIComponent(id),{
+      method:"DELETE",headers:authHeaders({"Prefer":"return=minimal"})
+    });
+    if(res.ok)return true;
+    if(res.status===401||res.status===403){
+      S._saveErr="삭제 권한이 없어요. 로그아웃 후 다시 로그인해 주세요.";
+      return false;
+    }
+    S._saveErr="서버에서 삭제하지 못했어요 (응답 "+res.status+").";
+    return false;
+  }catch(e){
+    S._saveErr="네트워크 문제로 서버에서 삭제하지 못했어요.";
+    return false;
+  }
 }
 
 async function dbLoadNotices(){
@@ -1401,7 +1422,14 @@ async function syncFromDB(){
     S._syncing=true;
     await flushPending().catch(()=>{});   // 못 보낸 결과부터 밀어 넣는다
     const [sts, nts, res] = await Promise.all([dbLoadStudents(), dbLoadNotices(), dbLoadResources()]);
-    if(sts !== null){ S.students = sts; saveSt(sts); }
+    if(sts !== null){
+      const tomb=loadTomb();
+      // 서버에서 이미 사라진 표식은 정리하고, 아직 남아 있는 것은 화면에서 가린다
+      const ids=sts.map(x=>x.id);
+      dropTomb(ids);
+      const filtered=tomb.length?sts.filter(x=>tomb.indexOf(x.id)<0):sts;
+      S.students = filtered; saveSt(filtered);
+    }
     if(nts !== null){ S.notices = nts; saveNotices(nts); }
     if(res !== null){ S.resources = res; saveResources(res); }
     S._syncing=false;
@@ -3771,10 +3799,10 @@ function bindEv(){
         const sid=btn.dataset.sid;
         const sname=btn.dataset.name;
         if(!sid||!sname) return;
-        showDelModal(sname, ()=>{
-          dbDeleteStudent(sid);
+        showDelModal(sname, async()=>{
           set({students:S.students.filter(x=>x.id!==sid)});
-          toast(sname+" 학생이 삭제되었습니다.");
+          const okDel=await dbDeleteStudent(sid);
+          toast(okDel?(sname+" 학생을 삭제했어요."):("⚠️ "+(S._saveErr||"서버에서 삭제하지 못했어요.")));
         });
       });
     });
@@ -3862,10 +3890,11 @@ function bindEv(){
     on("btn-edit",()=>{if(s)set({menu:"formEdit",form:{name:s.name,grade:s.grade,cls:s.cls||1,teacher:s.teacher,country:s.country||"대한민국",stype:s.stype||STYPES[0]},fe:{}});});
     on("btn-del",()=>{
       if(!s) return;
-      showDelModal(s.name, ()=>{
-        dbDeleteStudent(sid);
+      showDelModal(s.name, async()=>{
         set({students:S.students.filter(x=>x.id!==sid),menu:"survey",sid:null});
-        toast(s.name+" 학생이 삭제되었습니다.");
+        const okDel=await dbDeleteStudent(sid);
+        if(!okDel)toast("⚠️ "+(S._saveErr||"서버에서 삭제하지 못했어요."));
+        else toast(s.name+" 학생이 삭제되었습니다.");
       });
     });
     on("btn-start-survey",()=>set({menu:"svStart",sAns:{},sQ:0,focusDoms:null}));
@@ -3916,9 +3945,11 @@ function bindEv(){
       autoNeis(stu0,true);
     });
     // ── 회차 삭제 ──
-    const saveStu=(us)=>{
+    const saveStu=async(us)=>{
       set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
-      dbSaveStudent(us);
+      saveSt(S.students);
+      const r=await dbSaveStudent(us);
+      if(USE_DB()&&r===false)toast("⚠️ 화면에서는 지웠지만 서버 반영에 실패했어요. 관리자 화면에서 확인해 주세요.");
     };
     onA(".rd-del",e=>{
       const idx=Number(e.currentTarget.dataset.i);
