@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-13"/>
+<meta name="app-version" content="2026-08-23-14"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-13";
+const APP_VERSION = "2026-08-23-14";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1471,6 +1471,66 @@ async function pushLocalToDB(){
 // ── 기본 데이터 함수 ──────────────────────────────────────
 function defData(){return[];}
 function defNotices(){return[];}
+const PROG_LIB={
+ "정체성 인식":[
+   {n:"이중언어교육프로그램", o:"거점형다문화교육센터"},
+   {n:"이주배경학생 상담", o:"김해시가족센터"},
+   {n:"맞춤형 상담", o:"인제대학교"},
+   {n:"학교로 찾아가는 문화예술전문가", o:"경상남도교육청"},
+   {n:"다가치 어울림 동아리", o:"경상남도교육청"},
+   {n:"가족 나들이 문화체험", o:"경상남도교육청"}
+ ],
+ "문화 다양성 이해":[
+   {n:"다문화 교육주간", o:"경상남도교육청"},
+   {n:"찾아가는 다문화 교육", o:"김해시가족센터"},
+   {n:"문화 다양성 교육", o:"김해시문화재단"},
+   {n:"다문화 맞춤형 교육지원 체험", o:"김해교육지원청"},
+   {n:"오감통통 문화체험프로그램", o:"김해내동초"},
+   {n:"청소년 다문화 페스타", o:"김해시청"},
+   {n:"함께 행복한 책 읽기", o:"김해도서관"}
+ ],
+ "편견 인식 및 공감":[
+   {n:"어울림 한마당", o:"김해교육지원청"},
+   {n:"마음 챙김 학생 동아리", o:"경상남도교육청"},
+   {n:"또래상담반", o:"김해Wee센터"},
+   {n:"정서행동 사후 관리 프로그램", o:"김해교육지원청"},
+   {n:"위기학생 대상 표준화 심리 검사", o:"경상남도교육청"},
+   {n:"사제동행 프로그램", o:"경상남도교육청"}
+ ],
+ "평등 기반 존중 태도":[
+   {n:"학생맞춤통합지원 선도학교", o:"경상남도교육청"},
+   {n:"교육복지우선지원사업", o:"경상남도교육청"},
+   {n:"위기학생 SOS 긴급지원", o:"경상남도교육청"},
+   {n:"이주배경학생 의료비 지원", o:"경상남도교육청"},
+   {n:"저소득가정 안경지원사업", o:"경상남도교육청"},
+   {n:"아이로지킴이 프로그램", o:"경상남도교육청"}
+ ],
+ "문화 간 소통":[
+   {n:"한국어 학급", o:"경남교육청다문화교육센터"},
+   {n:"방학 중 한국어 캠프", o:"김해교육지원청"},
+   {n:"디지털 활용 맞춤형 학습(모두의 한국어)", o:"모두의 한국어"},
+   {n:"환급 학생 대상 한국어·교과 학습", o:"인제대학교"},
+   {n:"새학기 적응프로그램", o:"경상남도교육청"},
+   {n:"다국어 통역 제공(다누리콜센터)", o:"경상남도교육청"},
+   {n:"다가치통번역지원단", o:"경상남도교육청"},
+   {n:"가정통신문 다국어 번역", o:"경상남도교육청"},
+   {n:"맞춤형이음교실", o:"거점형다문화교육센터"}
+ ],
+ "공존 실천 및 협력":[
+   {n:"학교 스포츠클럽(스포츠스태킹·줄넘기·한궁)", o:"경상남도교육청"},
+   {n:"ECO STREAM 동아리", o:"김해교육지원청"},
+   {n:"기후 천사단 동아리", o:"경상남도교육청"},
+   {n:"독도지킴이 동아리", o:"경상남도교육청"},
+   {n:"온라인 독서 동아리", o:"경상남도교육청"},
+   {n:"학생 주도 위험요인발굴개선 동아리", o:"경상남도교육청"},
+   {n:"진로캠프", o:"김해시가족센터"},
+   {n:"비즈쿨 진로 체험 활동", o:"창업진흥원"},
+   {n:"꿈키움 힐링클래스", o:"경상남도교육청"},
+   {n:"두드림학교", o:"경상남도교육청"},
+   {n:"기초학력전담강사", o:"경상남도교육청"}
+ ]
+};
+
 function defPrograms(){return[
   {name:"나를 알아가는 자기이해 프로그램",domain:"정체성 인식",desc:"자신의 경험과 배경을 긍정적으로 바라보는 자아 정체성 형성",target:60,sessions:8,color:"#4C6FE8"},
   {name:"세계문화 탐구 프로그램",domain:"문화 다양성 이해",desc:"여러 나라의 문화와 생활방식을 알아보고 차이를 이해하기",target:60,sessions:8,color:"#8B5CF6"},
@@ -2161,8 +2221,14 @@ function hSupportPanel(s,progs){
     o+='<div style="font-size:11.5px;font-weight:700;margin-bottom:7px">지원 영역</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">';
     SUBS.forEach(k=>{const on=k===dom;o+='<button class="supdom" data-d="'+hcv(k)+'" style="padding:9px 4px;border-radius:9px;font-size:10.5px;font-weight:700;cursor:pointer;line-height:1.35;border:1.5px solid '+(on?SUBM[k].c:"var(--b)")+';background:'+(on?SUBM[k].c:"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+hcv(k)+'</button>';});
     o+='</div>';
-    o+='<div style="font-size:11.5px;font-weight:700;margin-bottom:6px">프로그램명</div>';
-    o+='<input id="sup-name" value="'+hcv(rec?rec.name:"")+'" placeholder="예) 인지+ 문화이해 지원" style="width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--b);font-size:13px;background:#fff;color:var(--t);outline:none;margin-bottom:11px"/>';
+    const lib=PROG_LIB[dom]||[];
+    o+='<div style="font-size:11.5px;font-weight:700;margin-bottom:6px">프로그램 고르기</div>';
+    o+='<select id="sup-pick" style="width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--b);font-size:13px;background:#fff;color:var(--t);outline:none;margin-bottom:8px;font-family:inherit;cursor:pointer">';
+    o+='<option value="">— 학교 운영 프로그램에서 고르기 —</option>';
+    lib.forEach(x=>{o+='<option value="'+hcv(x.n)+'" data-org="'+hcv(x.o)+'">'+hcv(x.n)+' ('+hcv(x.o)+')</option>';});
+    o+='<option value="__custom__">직접 입력하기…</option>';
+    o+='</select>';
+    o+='<input id="sup-name" value="'+hcv(rec?rec.name:"")+'" placeholder="위에서 고르거나 여기에 직접 적어주세요" style="width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--b);font-size:13px;background:#fff;color:var(--t);outline:none;margin-bottom:11px"/>';
     o+='<div style="display:flex;gap:8px;margin-bottom:11px">';
     o+='<div style="flex:1.3"><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">시작일</div><input id="sup-start" type="date" value="'+td()+'" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none;font-family:inherit"/></div>';
     o+='<div style="flex:.8"><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">회기수</div><input id="sup-ses" type="number" min="1" max="60" value="'+(rec?rec.sessions:8)+'" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none"/></div>';
@@ -3511,33 +3577,38 @@ function pgSupport(){
   const{students:sl,programs:progs}=S;
   const done=sl.filter(s=>s.scores);
   const needSupport={};
-  DS.forEach(d=>{const ns=done.filter(s=>s.scores[d]<60);if(ns.length)needSupport[d]=ns;});
+  SUBS.forEach(k=>{const ns=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<60;});if(ns.length)needSupport[k]=ns;});
   const totalNeed=new Set(Object.values(needSupport).flat().map(s=>s.id)).size;
   let body=hTopbar("지원 프로그램 관리",false);
   body+='<div style="padding:16px 20px;max-width:900px">';
   // 요약 카드
-  body+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">';
-  body+='<div class="card" style="padding:14px;text-align:center"><div style="font-size:26px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">지원 필요 학생</div></div>';
-  DS.forEach(d=>{const cnt=(needSupport[d]||[]).length;body+='<div class="card" style="padding:14px;text-align:center;border-left:4px solid '+DM[d].c+'"><div style="font-size:22px;font-weight:900;color:'+DM[d].c+'">'+cnt+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+d+' 지원</div></div>';});
+  body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center"><div style="font-size:30px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:12px;color:var(--m);margin-top:3px">60점 미만이 하나라도 있는 학생</div></div>';
+  body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
+  SUBS.forEach(k=>{const cnt=(needSupport[k]||[]).length;
+    body+='<div class="card" style="padding:13px;text-align:center;border-left:4px solid '+SUBM[k].c+'"><div style="font-size:22px;font-weight:900;color:'+SUBM[k].c+'">'+cnt+'</div><div style="font-size:10.5px;color:var(--m);margin-top:3px;line-height:1.4">'+hcv(k)+'</div></div>';});
   body+='</div>';
   if(Object.keys(needSupport).length===0){
     body+='<div class="card" style="padding:40px;text-align:center;color:var(--m)">🌟 모든 학생이 60점 이상이에요!</div>';
   } else {
     body+='<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">';
-    DS.forEach(d=>{
+    SUBS.forEach(d=>{
       const ns=needSupport[d]||[];if(!ns.length)return;
-      const prog=progs.find(p=>p.domain===d);
-      body+='<div class="card" style="border-left:4px solid '+DM[d].c+'">';
-      body+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
-      body+='<div><div style="font-size:13px;font-weight:700;color:'+DM[d].c+'">'+DM[d].k+' 지원 필요 ('+ns.length+'명)</div>';
-      if(prog)body+='<div style="font-size:11px;color:var(--m);margin-top:2px">추천: '+prog.name+' ('+prog.sessions+'회기)</div>';
-      body+='</div>';
-      if(prog)body+='<span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:'+DM[d].bg+';color:'+DM[d].c+'">'+prog.sessions+'회기</span>';
+      const lib=PROG_LIB[d]||[];
+      body+='<div class="card" style="border-left:4px solid '+SUBM[d].c+'">';
+      body+='<div style="margin-bottom:11px">';
+      body+='<div style="font-size:13.5px;font-weight:800;color:'+SUBM[d].c+'">'+hcv(d)+' · 지원 필요 '+ns.length+'명</div>';
+      if(lib.length){
+        body+='<div style="font-size:11px;color:var(--m);margin-top:7px;line-height:1.6">이 영역에 쓸 수 있는 학교 운영 프로그램</div>';
+        body+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">';
+        lib.slice(0,6).forEach(x=>{body+='<span style="font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:20px;background:'+SUBM[d].bg+';color:'+SUBM[d].c+'">'+hcv(x.n)+'</span>';});
+        if(lib.length>6)body+='<span style="font-size:10.5px;color:var(--m);padding:4px 6px">외 '+(lib.length-6)+'개</span>';
+        body+='</div>';
+      }
       body+='</div><div style="display:flex;flex-wrap:wrap;gap:8px">';
       ns.forEach(s=>{
         body+='<div style="background:var(--bg);border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:8px">';
-        body+='<div style="width:30px;height:30px;border-radius:50%;background:'+DM[d].bg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+DM[d].c+'">'+s.name[0]+'</div>';
-        body+='<div><div style="font-size:12px;font-weight:600">'+s.name+'</div><div style="font-size:10px;color:var(--m)">'+d+' <strong style="color:'+DM[d].c+'">'+s.scores[d]+'점</strong></div></div></div>';
+        body+='<div style="width:30px;height:30px;border-radius:50%;background:'+SUBM[d].bg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+SUBM[d].c+'">'+s.name[0]+'</div>';
+        body+='<div><div style="font-size:12px;font-weight:600">'+hcv(s.name)+'</div><div style="font-size:10px;color:var(--m)"><strong style="color:'+SUBM[d].c+'">'+((subScores(s.scores)||{})[d]||0)+'점</strong></div></div></div>';
       });
       body+='</div></div>';
     });
@@ -4187,6 +4258,20 @@ function bindEv(){
     onA(".rawtab",e=>set({rawTab:Number(e.currentTarget.dataset.k)}));
     // ── 지원 프로그램 현황 ──
     on("btn-sup-toggle",()=>set({supOpen:!S.supOpen,supDom:S.supDom||SUBS[0]}));
+    {
+      const pick=document.getElementById("sup-pick");
+      if(pick)pick.addEventListener("change",()=>{
+        const v=pick.value;
+        const nm=document.getElementById("sup-name");
+        const mm=document.getElementById("sup-memo");
+        if(v==="__custom__"){ if(nm){nm.value="";nm.focus();} return; }
+        if(!v)return;
+        if(nm)nm.value=v;
+        const opt=pick.options[pick.selectedIndex];
+        const org=opt?opt.getAttribute("data-org"):"";
+        if(mm&&org&&!mm.value.trim())mm.value="협력기관: "+org;
+      });
+    }
     onA(".supdom",e=>{
       const d=e.currentTarget.dataset.d;
       const pr=(S.programs||defPrograms()).find(x=>x.domain===d);
