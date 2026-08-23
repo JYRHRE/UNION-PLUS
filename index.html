@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-08"/>
+<meta name="app-version" content="2026-08-23-09"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -807,12 +807,20 @@ function toast(msg,dur=2500){
 function calcSc(ans,gr,lang,only){
   const qs=getQs(gr),r={};
   // 문항 묶음 하나를 0~100으로 환산
+  //
+  // ⚠️ 리커트는 보기 1번이 "매우 그렇다"(가장 긍정)이다.
+  //    그대로 더하면 잘 한 학생이 낮게 나오므로 6-v 로 뒤집는다.
+  //    1~2학년 4지선다는 보기 순서가 약함→강함이라 그대로 쓴다.
   const score=list=>{
     if(!list.length)return null;
-    const A=list.filter(q=>q.part==="A"||!q.part), B=list.filter(q=>q.part==="B");
     let tot=0,max=0;
-    if(A.length){ tot+=A.reduce((a,q)=>a+(ans[q.id]||0),0); max+=A.length*5; }
-    if(B.length){ tot+=B.reduce((a,q)=>a+(ans[q.id]||0),0); max+=B.length*4; }
+    list.forEach(q=>{
+      let v=ans[q.id]||0;
+      const isLikert=(q.type==="likert");
+      if(isLikert && v>0) v=6-v;
+      tot+=v;
+      max+=(gr<=2 || q.type==="choice") ? 4 : 5;
+    });
     return max?Math.round(tot/max*100):0;
   };
   // 하위영역 6개
@@ -834,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-08";
+const APP_VERSION = "2026-08-23-09";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
