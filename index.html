@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-23-11"/>
+<meta name="app-version" content="2026-08-23-12"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -842,7 +842,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-23-11";
+const APP_VERSION = "2026-08-23-12";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -967,7 +967,14 @@ async function diagNet(){
     out.push({ok:false,t:"DB 설정",d:"주소나 키가 비어 있습니다. index.html 의 SCHOOL_DB 를 확인하세요."});
     return out;
   }
-  out.push({ok:true,t:"DB 설정",d:"프로젝트 "+projectRef()});
+  const override=localStorage.getItem("sb_url");
+  if(override && SCHOOL_DB.url && override!==SCHOOL_DB.url){
+    const mine=(String(SCHOOL_DB.url).match(/https?:\/\/([a-z0-9]+)\./i)||[])[1]||"";
+    out.push({ok:false,t:"DB 설정",
+      d:"이 기기에만 다른 프로젝트("+projectRef()+")가 저장돼 있어요. 학교 기본값은 "+mine+" 입니다. 아래 ‘학교 설정으로 되돌리기’를 눌러주세요."});
+    return out;
+  }
+  out.push({ok:true,t:"DB 설정",d:"프로젝트 "+projectRef()+(usingSchoolDB()?" (학교 기본값)":" (이 기기 설정)")});
 
   // 3) Supabase 서버가 살아 있는가 (무료 요금제는 오래 쉬면 일시정지된다)
   try{
@@ -2513,6 +2520,12 @@ function pgLogin(){
     h+='<input id="pw-input" type="password" autocomplete="current-password" placeholder="비밀번호를 입력하세요" style="width:100%;padding:12px 14px;border-radius:11px;border:1.5px solid '+(S.pwErr?"var(--d)":"var(--b)")+';font-size:14px;outline:none;color:var(--t);background:#fff;margin-bottom:10px">';
     if(S.pwErr)h+='<div role="alert" style="color:var(--d);font-size:12px;font-weight:700;margin-bottom:9px;line-height:1.6">'+S.pwErr+'</div>';
     h+='<button id="btn-pw-ok" class="btn-p" style="border-radius:11px">'+(S.loggingIn?"확인 중...":"로그인")+'</button>';
+    if(localStorage.getItem("sb_url")&&SCHOOL_DB.url&&localStorage.getItem("sb_url")!==SCHOOL_DB.url){
+      h+='<div style="margin-top:10px;padding:11px 13px;border-radius:11px;background:#FFF6E5;border:1px solid #F5D48A">';
+      h+='<div style="font-size:11.5px;font-weight:800;color:#B8791A;margin-bottom:4px">이 기기에만 다른 서버가 설정돼 있어요</div>';
+      h+='<div style="font-size:11px;color:#8A6414;line-height:1.65;margin-bottom:9px">그래서 학교 데이터에 연결되지 않습니다.</div>';
+      h+='<button id="btn-reset-db" style="width:100%;padding:10px 0;border-radius:10px;border:none;background:#F5A623;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">학교 설정으로 되돌리기</button></div>';
+    }
     h+='<button id="btn-diag" style="width:100%;margin-top:9px;padding:10px 0;border-radius:11px;border:1px solid var(--b);background:var(--s);color:var(--m);font-size:12.5px;font-weight:700;cursor:pointer">'+(S.diagRunning?"확인 중...":"연결 진단")+'</button>';
     if(S.diag&&S.diag.length){
       h+='<div style="margin-top:11px;padding:12px 13px;border-radius:12px;background:#fff;border:1px solid var(--b)">';
@@ -3674,6 +3687,11 @@ function bindEv(){
       }
       autoSync(true);
     };
+    on("btn-reset-db",()=>{
+      try{ localStorage.removeItem("sb_url"); localStorage.removeItem("sb_key"); }catch(e){}
+      toast("학교 설정으로 되돌렸어요. 다시 불러옵니다...");
+      setTimeout(()=>location.reload(),600);
+    });
     on("btn-diag",async()=>{
       S.diagRunning=true;set({});reopen();
       const r=await diagNet();
