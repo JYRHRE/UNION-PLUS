@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-22-02"/>
+<meta name="app-version" content="2026-08-23-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -729,7 +729,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-22-02";
+const APP_VERSION = "2026-08-23-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -878,7 +878,19 @@ async function diagNet(){
     else out.push({ok:false,t:"학생 표 읽기",d:"응답 코드 "+r.status});
   }catch(e){ out.push({ok:false,t:"학생 표 읽기",d:"요청 실패 ("+(e&&e.message||"")+")"}); }
 
-  // 5) 로그인 창구가 열려 있는가
+  // 5) 학생 제출 통로가 열려 있는가
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/rpc/submit_student",{
+      method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
+      body:JSON.stringify({payload:{}})});
+    if(r.status===404)
+      out.push({ok:false,t:"학생 제출 통로",d:"아직 만들어지지 않았어요. 5_학생제출_고치기.sql 을 실행하세요."});
+    else if(r.status===401||r.status===403)
+      out.push({ok:false,t:"학생 제출 통로",d:"권한이 없습니다. 5_학생제출_고치기.sql 의 grant 구문까지 실행됐는지 확인하세요."});
+    else out.push({ok:true,t:"학생 제출 통로",d:"정상 (식별자 없는 요청이라 거절된 것)"});
+  }catch(e){ out.push({ok:false,t:"학생 제출 통로",d:"요청 실패 ("+(e&&e.message||"")+")"}); }
+
+  // 6) 로그인 창구가 열려 있는가
   try{
     const r=await fetch(SB_URL+"/auth/v1/token?grant_type=password",{
       method:"POST",headers:{"Content-Type":"application/json","apikey":SB_KEY},
@@ -1099,21 +1111,32 @@ async function dbSaveStudent(s){
       supports:Array.isArray(s.supports)?s.supports:[],
       updated_at:new Date().toISOString()
     };
-    // Supabase REST API 직접 호출 (DataCloneError 우회)
-    const res = await fetch(SB_URL+"/rest/v1/students", {
-      method:"POST",
-      headers: authHeaders({
-        "Content-Type":"application/json",
-        "Prefer":"resolution=merge-duplicates,return=minimal"
-      }),
-      body: JSON.stringify(row)
-    });
+    const res = isAuthed()
+      // 로그인한 교사 — 전체 항목을 저장
+      ? await fetch(SB_URL+"/rest/v1/students", {
+          method:"POST",
+          headers: authHeaders({
+            "Content-Type":"application/json",
+            "Prefer":"resolution=merge-duplicates,return=minimal"
+          }),
+          body: JSON.stringify(row)
+        })
+      // 로그인하지 않은 학생 — 설문 제출 전용 통로
+      : await fetch(SB_URL+"/rest/v1/rpc/submit_student", {
+          method:"POST",
+          headers: authHeaders({"Content-Type":"application/json"}),
+          body: JSON.stringify({payload: row})
+        });
     if(!res.ok){
       const errText = await res.text().catch(()=>"");
       console.warn("[UNION+] 학생 저장 실패:", res.status, errText);
       // 왜 막혔는지 사람이 읽을 수 있게 남겨둔다
-      if(res.status===401||res.status===403)
-        S._saveErr="서버가 저장을 거부했어요. 보안잠금 SQL(3번)의 student_insert·student_update 정책이 있는지 확인해 주세요.";
+      if(res.status===404&&!isAuthed())
+        S._saveErr="학생 제출 통로가 아직 없어요. 5_학생제출_고치기.sql 을 실행해 주세요.";
+      else if(res.status===401||res.status===403)
+        S._saveErr=isAuthed()
+          ? "서버가 저장을 거부했어요. 보안잠금 SQL(3번)을 확인해 주세요."
+          : "학생 제출이 막혀 있어요. 5_학생제출_고치기.sql 을 실행해 주세요.";
       else if(/PGRST204|column/i.test(errText))
         S._saveErr="표에 없는 항목이 있어요. 설치 SQL(1번)을 한 번 더 실행해 컬럼을 맞춰주세요.";
       else if(res.status===404)
@@ -1150,18 +1173,21 @@ async function flushPending(){
   for(const s of a){
     let okk=false;
     try{
-      const res=await fetch(SB_URL+"/rest/v1/students",{
-        method:"POST",
-        headers:authHeaders({"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"}),
-        body:JSON.stringify({
+      const row2={
           id:String(s.id),name:String(s.name||""),grade:Number(s.grade)||1,cls:Number(s.cls)||1,
           teacher:String(s.teacher||""),country:String(s.country||"대한민국"),stype:String(s.stype||"일반학생"),
           tc_note:String(s.tcNote||""),tc_note_at:String(s.tcNoteAt||""),team_fb:s.teamFb||null,
           at:String(s.at||td()),scores:s.scores||null,
           score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
           logs:Array.isArray(s.logs)?s.logs:[],supports:Array.isArray(s.supports)?s.supports:[],
-          updated_at:new Date().toISOString()})
-      });
+          updated_at:new Date().toISOString()};
+      const res = isAuthed()
+        ? await fetch(SB_URL+"/rest/v1/students",{method:"POST",
+            headers:authHeaders({"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"}),
+            body:JSON.stringify(row2)})
+        : await fetch(SB_URL+"/rest/v1/rpc/submit_student",{method:"POST",
+            headers:authHeaders({"Content-Type":"application/json"}),
+            body:JSON.stringify({payload:row2})});
       okk=res.ok;
     }catch(e){ okk=false; }
     okk?sent++:left.push(s);
