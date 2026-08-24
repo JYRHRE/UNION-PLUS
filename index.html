@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-24-01"/>
+<meta name="app-version" content="2026-08-24-09"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -132,6 +132,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .sec-t{font-size:13.5px;font-weight:800;color:var(--t);letter-spacing:-.02em}
 .sec-n{font-size:11.5px;color:var(--m);font-weight:500}
 .eyebrow{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--m);text-transform:uppercase}
+/* 문항 출처·타당도 블록 */
+details>summary::-webkit-details-marker{display:none}
+details>summary::marker{content:""}
+details>summary{transition:background .15s}
+details>summary:hover{background:rgba(255,255,255,.55)}
+details[open]>summary span:last-child{opacity:.4}
 
 /* ── 학생 전용 ── */
 .stu-page{background:var(--stu-bg)}
@@ -214,6 +220,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 const DM={인지:{k:"인지·문화이해",c:"#5B6EE8",bg:"#EEEEFF"},정의:{k:"정의·감정공감",c:"#E8445A",bg:"#FFEEF0"},행동:{k:"행동·소통협력",c:"#22C79A",bg:"#E3FAF4"}};
 const DS=["인지","정의","행동"];
 
+/* ── 점수 기준선 ───────────────────────────────────────────
+   점수는 0~100 확장 스케일(최하 응답=0, 최고 응답=100)이다.
+   옛 20~100 스케일의 60점 커트라인은 새 스케일 50점과 같은 자리다.
+   기준을 조정하려면 이 두 값만 고치면 화면 전체가 따라온다. */
+const T_NEED = 50;   // 이 점수 미만이면 집중 지원 대상
+const T_GOOD = 70;   // 이 점수 이상이면 양호
+
 // ── 진단 하위영역 6개 (실제 분석 단위) ────────────────────
 const SUBS=["정체성 인식","문화 다양성 이해","편견 인식 및 공감","평등 기반 존중 태도","문화 간 소통","공존 실천 및 협력"];
 const SUBM={
@@ -234,6 +247,28 @@ function subScores(sc){
   return r;
 }
 function hasSub(sc){ return !!sc && SUBS.some(k=>sc[k]!=null); }
+
+/* ── 회차가 '실제로 측정한' 하위영역 ────────────────────────
+   전체 진단은 6개 영역을 모두 새로 잰다.
+   영역 재진단은 지정한 영역만 새로 재고, 나머지는 직전 값을 그대로
+   이어받는다. 이어받은 값을 측정값처럼 다루면 성장그래프가 "그때도
+   전부 검사했다"고 거짓말을 하게 되므로, 무엇을 실제로 쟀는지를
+   entry.measured 에 남긴다.
+     · measured 가 있으면 그대로 쓴다
+     · 없는 옛 회차는 focus 로 되짚는다 (focus 없으면 전체 진단)
+   focus 에는 하위영역명이 들어오지만, 옛 기록에는 상위영역명
+   (인지/정의/행동)이 들어있을 수 있어 둘 다 받아준다. */
+function measuredOf(entry){
+  if(!entry)return SUBS.slice();
+  if(Array.isArray(entry.measured)&&entry.measured.length)
+    return entry.measured.filter(k=>SUBS.includes(k));
+  const f=entry.focus;
+  if(!f||!f.length)return SUBS.slice();
+  const out=SUBS.filter(k=>f.includes(k)||f.includes(SUBM[k].d));
+  return out.length?out:SUBS.slice();
+}
+// 이 회차가 전체 진단인가
+function isFullRound(entry){ return measuredOf(entry).length===SUBS.length; }
 // 상위 3영역은 하위영역 평균으로 다시 계산한다
 function rollup(sc){
   if(!sc)return sc;
@@ -760,9 +795,35 @@ const getQsLang=(g,lang)=>{
 };
 
 const getQs=g=>g<=2?Q12:Q36;
+
+/* ── 하위영역 문항 구간 고정 ───────────────────────────────
+   3-6학년 24문항:  1~4 정체성 / 5~8 문화다양성 / 9~12 편견·공감
+                    13~16 존중태도 / 17~20 소통 / 21~24 공존실천
+   1-2학년 12문항:  2문항씩 같은 순서
+   문항을 수정하다 sub 라벨이 어긋나도 점수가 틀어지지 않도록,
+   배열 순번을 기준으로 sub 를 다시 못박는다. (다국어는 그 배열이
+   쓰던 번역어를 그대로 유지) */
+const SUB_SPAN_24=[4,4,4,4,4,4], SUB_SPAN_12=[2,2,2,2,2,2];
+function lockSubs(arr,span){
+  const labels=[]; let at=0;
+  span.forEach(n=>{ labels.push((arr[at]||{}).sub); at+=n; });
+  at=0;
+  span.forEach((n,gi)=>{ for(let k=0;k<n;k++){ if(arr[at]) arr[at].sub=labels[gi]; at++; } });
+  return arr;
+}
+[Q36,Q36_EN,Q36_ZH,Q36_VI,Q36_RU].forEach(a=>lockSubs(a,SUB_SPAN_24));
+[Q12,Q12_EN,Q12_ZH,Q12_VI,Q12_RU].forEach(a=>lockSubs(a,SUB_SPAN_12));
 // 집중 재진단: S.focusDoms 가 있으면 해당 영역 문항만 출제
 const svQs=(g,lang)=>{const all=getQsLang(g,lang||"ko");
-  const f=S&&S.focusDoms;return (f&&f.length)?all.filter(q=>f.includes(q.d)):all;};
+  const f=S&&S.focusDoms;
+  if(!f||!f.length)return all;
+  // focusDoms 에는 하위영역 6개 이름이 담긴다. 다국어 배열은 sub 가 번역어라
+  // 한국어 원본(getQs)의 같은 순번 문항 sub 로 판정해야 한다.
+  const ko=getQs(g);
+  return all.filter((q,i)=>{
+    const kq=ko[i]||q;
+    return f.includes(kq.sub) || f.includes(kq.d);
+  });};
 const gg=g=>g<=2?"1-2학년군 (12문항)":"3-6학년군 (24문항)";
 
 function calcScAlt(ans, gr, lang, only){
@@ -806,7 +867,7 @@ const S={
   pwErr:false, pwChange:null,
   msg:"", neisText:"", neisCh:300,
   coaches:loadCoach(), coachSel:"basic", coachEdit:null,
-  focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0],
+  focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0], fltState:"all",
   rawOpen:false, rawTab:null, loginEmail:"", loggingIn:false, diag:null, diagRunning:false,
   bulkText:"", bulkGrade:1, bulkCls:1,
   fltDom:"all", fltCond:"all", teamOpen:false,
@@ -855,17 +916,28 @@ function calcSc(ans,gr,lang,only){
   // ⚠️ 리커트는 보기 1번이 "매우 그렇다"(가장 긍정)이다.
   //    그대로 더하면 잘 한 학생이 낮게 나오므로 6-v 로 뒤집는다.
   //    1~2학년 4지선다는 보기 순서가 약함→강함이라 그대로 쓴다.
+  //
+  // 📏 0~100 확장 환산 (2026-08-24 변경)
+  //    예전에는 tot/max*100 이라 최하 응답도 리커트 20점 / 4지선다 25점이 나왔다.
+  //    학년군끼리 바닥이 달라 한 표에 놓고 볼 수 없었고, 60점 커트라인도
+  //    실제로는 중간이 아니었다. 이제 최하 응답 = 0점, 최고 응답 = 100점으로
+  //    펼쳐서 1학년부터 6학년까지 같은 자로 잰다.
+  //      점수 = (합계 - 최소가능) / (최대가능 - 최소가능) × 100
+  //    답하지 않은 문항은 최소점으로 깎지 않고 계산에서 제외한다.
   const score=list=>{
     if(!list.length)return null;
-    let tot=0,max=0;
+    let tot=0,lo=0,hi=0;
     list.forEach(q=>{
       let v=ans[q.id]||0;
+      if(!v)return;                                  // 미응답은 제외
       const isLikert=(q.type==="likert");
-      if(isLikert && v>0) v=6-v;
-      tot+=v;
-      max+=(gr<=2 || q.type==="choice") ? 4 : 5;
+      if(isLikert) v=6-v;                            // 1=매우그렇다 → 5점
+      const mx=(gr<=2 || q.type==="choice") ? 4 : 5;
+      tot+=v; lo+=1; hi+=mx;
     });
-    return max?Math.round(tot/max*100):0;
+    if(hi<=lo)return null;                           // 답한 문항이 없음
+    const p=Math.round((tot-lo)/(hi-lo)*100);
+    return Math.max(0,Math.min(100,p));
   };
   // 하위영역 6개
   const onlySet = (only&&only.length)?only:null;
@@ -886,7 +958,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-24-01";
+const APP_VERSION = "2026-08-24-09";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1495,7 +1567,7 @@ async function syncFromDB(){
       // 서버에서 이미 사라진 표식은 정리하고, 아직 남아 있는 것은 화면에서 가린다
       const ids=sts.map(x=>x.id);
       dropTomb(ids);
-      const filtered=tomb.length?sts.filter(x=>tomb.indexOf(x.id)<0):sts;
+      const filtered=migrateScales(tomb.length?sts.filter(x=>tomb.indexOf(x.id)<0):sts);
       S.students = filtered; saveSt(filtered);
     }
     if(nts !== null){ S.notices = nts; saveNotices(nts); }
@@ -1609,7 +1681,60 @@ function defResources(){return[
   {id:"r09",title:"세계 나라별 문화 소개",type:"link",url:"https://www.mofa.go.kr/www/wpge/m_3834/contents.do",desc:"외교부 세계 각국 문화 소개",category:"문화자료"}
 ];}
 
-const loadSt=()=>{try{const d=localStorage.getItem(SK);return d?JSON.parse(d):defData();}catch(e){return defData();}};
+/* ── 옛 점수(20~100 스케일) → 0~100 확장 스케일 변환 ──────────
+   2026-08-24 이전에 저장된 회차는 tot/max*100 방식이라 바닥이
+   리커트 20점 / 4지선다 25점이었다. 새 방식과 한 그래프에 섞이면
+   성장 추이가 왜곡되므로 불러올 때 한 번 맞춰 준다.
+
+   · 응답 원본(ans)이 남아 있으면 → 그대로 다시 채점한다 (정확)
+   · 원본이 없으면 → 선형 환산식을 쓴다
+        리커트 24문항 : new = (5p - 100) / 4
+        4지선다 12문항: new = (4p - 100) / 3
+   변환한 회차에는 sv:2 표식을 남겨 두 번 변환되지 않게 한다. */
+function convOld(p, gr){
+  const v=Number(p); if(!isFinite(v))return p;
+  const n = gr<=2 ? (4*v-100)/3 : (5*v-100)/4;
+  return Math.max(0,Math.min(100,Math.round(n)));
+}
+function migrateScales(list){
+  if(!Array.isArray(list))return list;
+  let touched=false;
+  const out=list.map(st=>{
+    const gr=Number(st.grade)||3;
+    const hist=st.scoreHistory||[];
+    if(!hist.length && !st.scores)return st;
+    let chg=false;
+    const nh=hist.map(e=>{
+      // measured 가 없는 옛 회차는 focus 로 되짚어 채워 넣는다
+      if(e && !Array.isArray(e.measured)){
+        e={...e, measured:measuredOf(e)};
+        chg=true;
+      }
+      if(!e || e.sv===2)return e;
+      chg=true;
+      if(e.ans && Object.keys(e.ans).length){
+        // 영역 재진단 회차는 답안에 그 영역 문항만 있으므로,
+        // 재지 않은 영역은 저장돼 있던 값(직전 회차에서 이어받은 값)을 지킨다
+        const rec=rollup(calcSc(e.ans, gr, e.lang||"ko"));
+        const keep={...(e.scores||{})};
+        measuredOf(e).forEach(k=>{ if(rec[k]!=null) keep[k]=rec[k]; });
+        return {...e, scores:rollup(keep), sv:2};
+      }
+      const sc={...(e.scores||{})};
+      SUBS.forEach(k=>{ if(sc[k]!=null) sc[k]=convOld(sc[k],gr); });
+      DS.forEach(d=>{ if(sc[d]!=null) sc[d]=convOld(sc[d],gr); });
+      return {...e, scores:rollup(sc), sv:2};
+    });
+    if(!chg)return st;
+    touched=true;
+    const last=nh.length?nh[nh.length-1].scores:null;
+    return {...st, scoreHistory:nh, scores:last||st.scores};
+  });
+  if(touched)try{console.log("[UNION+] 옛 점수를 0~100 스케일로 맞췄어요.");}catch(e){}
+  return out;
+}
+
+const loadSt=()=>{try{const d=localStorage.getItem(SK);return migrateScales(d?JSON.parse(d):defData());}catch(e){return defData();}};
 const saveSt=l=>{try{localStorage.setItem(SK,JSON.stringify(l));}catch(e){}};
 const getPw=()=>localStorage.getItem(PW_KEY)||"teacher1234";
 const NK="union_notices_v2", PRK="union_programs_v1", RSK="union_resources_v2";
@@ -1631,26 +1756,56 @@ function hRoundTabs(s){
   o+='<div style="display:flex;gap:0;border-bottom:1.5px solid var(--b);background:var(--s);overflow-x:auto">';
   hist.forEach((r,i)=>{const on=i===idx;
     o+='<button class="rtab" data-i="'+i+'" style="padding:12px 20px;border:none;background:'+(on?"var(--bg)":"transparent")+';cursor:pointer;font-size:13px;font-weight:'+(on?800:600)+';color:'+(on?"var(--p)":"var(--m)")+';border-bottom:3px solid '+(on?"var(--p)":"transparent")+';white-space:nowrap">'+(i+1)+'회차'
-     +(r.focus?'<span style="font-size:9px;font-weight:700;margin-left:5px;padding:2px 6px;border-radius:6px;background:#FFF0F6;color:#D6417F">집중</span>':'')+'</button>';});
+     +(isFullRound(r)
+        ?'<span style="font-size:9px;font-weight:700;margin-left:5px;padding:2px 6px;border-radius:6px;background:#EDF1FF;color:#4C6FE8">전체</span>'
+        :'<span style="font-size:9px;font-weight:700;margin-left:5px;padding:2px 6px;border-radius:6px;background:#FFF0F6;color:#D6417F">재진단</span>')+'</button>';});
   o+='</div>';
   o+='<div style="padding:16px">';
-  // 총점 · 분석완료일
+  // ⚠️ 총점보다 '가장 낮은 영역'을 앞세운다.
+  //    총점 85점 두 학생이라도 한 명은 정체성이, 다른 한 명은 소통이
+  //    낮을 수 있어서, 교사가 먼저 봐야 하는 건 총점이 아니라 약한 영역이다.
+  //    총점은 회차 비교용 참고값으로 작게 남긴다.
+  const curR=subScores(cur.scores)||{};
+  let lowK=null,lowV=101;
+  SUBS.forEach(k=>{const v=Number(curR[k])||0;if(v<lowV){lowV=v;lowK=k;}});
+  const lowC=lowV<T_NEED?"#E8445A":lowV<T_GOOD?"#D18A0A":"#0E8F68";
+  const lowBg=lowV<T_NEED?"#FFEEF1":lowV<T_GOOD?"#FFF6E4":"#E4F8F1";
+
   o+='<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">';
-  o+='<div style="flex:1;min-width:120px;padding:11px 14px;border-radius:12px;background:var(--pl)"><div style="font-size:10px;font-weight:700;color:var(--p);opacity:.75">총점</div><div style="font-size:26px;font-weight:900;color:var(--p);line-height:1.15">'+t+'<span style="font-size:12px">점</span>'
-   +(dt!==null?'<span style="font-size:12px;font-weight:800;margin-left:6px;color:'+(dt>=0?"#12A47C":"#E8445A")+'">'+(dt>=0?"▲":"▼")+Math.abs(dt)+'</span>':'')+'</div></div>';
-  o+='<div style="flex:1;min-width:120px;padding:11px 14px;border-radius:12px;background:var(--bg)"><div style="font-size:10px;font-weight:700;color:var(--m)">분석완료일</div><div style="font-size:15px;font-weight:800;margin-top:4px">'+hcv(cur.date||"-")+'</div></div>';
-  if(cur.focus)o+='<div style="flex:1;min-width:120px;padding:11px 14px;border-radius:12px;background:#FFF0F6"><div style="font-size:10px;font-weight:700;color:#D6417F">집중 재진단 영역</div><div style="font-size:14px;font-weight:800;margin-top:4px;color:#D6417F">'+hcv(cur.focus.join(" · "))+'</div></div>';
+  // 가장 낮은 영역 (주인공 자리)
+  o+='<div style="flex:1.6;min-width:170px;padding:12px 15px;border-radius:12px;background:'+lowBg+'">';
+  o+='<div style="font-size:10px;font-weight:800;color:'+lowC+';opacity:.85">'+(lowV>=T_GOOD?"가장 낮은 영역 · 모두 양호":"먼저 살펴볼 영역")+'</div>';
+  o+='<div style="display:flex;align-items:baseline;gap:7px;margin-top:3px;flex-wrap:wrap">';
+  o+='<span style="font-size:17px;font-weight:900;color:'+lowC+';letter-spacing:-.02em;line-height:1.2">'+hcv(lowK||"-")+'</span>';
+  o+='<span style="font-size:24px;font-weight:900;color:'+lowC+';line-height:1.1">'+lowV+'</span></div>';
+  // 나머지 다섯 영역을 작은 점수 줄로 붙여, 총점 하나로 뭉뚱그리지 않는다
+  const rest=SUBS.filter(k=>k!==lowK).map(k=>[k,Number(curR[k])||0]).sort((a,b)=>a[1]-b[1]);
+  o+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">';
+  rest.forEach(([k,v])=>{o+='<span style="font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:#ffffffAA;color:'+SUBM[k].c+'">'+hcv(SUBM[k].s)+' '+v+'</span>';});
+  o+='</div></div>';
+  // 분석완료일
+  o+='<div style="flex:1;min-width:110px;padding:11px 14px;border-radius:12px;background:var(--bg)"><div style="font-size:10px;font-weight:700;color:var(--m)">분석완료일</div><div style="font-size:15px;font-weight:800;margin-top:4px">'+hcv(cur.date||"-")+'</div>';
+  // 총점은 참고값 — 회차 비교에만 쓴다
+  o+='<div style="margin-top:8px;padding-top:7px;border-top:1px solid var(--b);font-size:10px;color:var(--m);font-weight:700">참고 총점 <span style="color:var(--t);font-weight:800">'+t+'</span>'
+   +(dt!==null?'<span style="font-weight:800;margin-left:5px;color:'+(dt>=0?"#12A47C":"#E8445A")+'">'+(dt>=0?"▲":"▼")+Math.abs(dt)+'</span>':'')+'</div></div>';
+  if(!isFullRound(cur)){
+    const mz=measuredOf(cur);
+    o+='<div style="flex:1;min-width:120px;padding:11px 14px;border-radius:12px;background:#FFF0F6">';
+    o+='<div style="font-size:10px;font-weight:700;color:#D6417F">🎯 영역 재진단 · 이번에 측정한 영역</div>';
+    o+='<div style="font-size:14px;font-weight:800;margin-top:4px;color:#D6417F">'+hcv(mz.map(k=>SUBM[k].s).join(" · "))+'</div>';
+    o+='<div style="font-size:9.5px;color:#B0537F;margin-top:5px;line-height:1.55">나머지 '+(SUBS.length-mz.length)+'개 영역은 새로 재지 않았고, 직전 회차 값을 그대로 이어받았습니다.</div></div>';
+  }
   o+='</div>';
   // 그래프 + 막대
   o+='<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">'+hRadar(cur.scores,130,true)+'<div style="flex:1;min-width:160px">'+hBars(cur.scores)+'</div></div>';
   // 재진단 버튼
   const curSub=subScores(cur.scores)||{};
-  const low=SUBS.filter(k=>(Number(curSub[k])||0)<60);
+  const low=SUBS.filter(k=>(Number(curSub[k])||0)<T_NEED);
   o+='<div style="display:flex;gap:7px;margin-top:15px;flex-wrap:wrap">';
   o+='<button id="btn-resurvey" style="flex:1;min-width:150px;padding:11px 0;border-radius:11px;border:1.5px solid var(--b);background:var(--s);color:var(--m);font-size:12.5px;font-weight:700;cursor:pointer">🔄 전체 다시 진단</button>';
   if(low.length)o+='<button id="btn-focus-survey" data-doms="'+hcv(low.join(","))+'" style="flex:1.4;min-width:180px;padding:11px 0;border-radius:11px;border:none;background:linear-gradient(135deg,#FF6B9D,#B97AFF);color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">🎯 '+low.map(k=>SUBM[k].s).join("·")+' 영역만 재진단 ('+low.length+'개)</button>';
   o+='</div>';
-  if(low.length)o+='<div style="font-size:11px;color:var(--m);margin-top:8px;line-height:1.6">60점 미만 영역만 골라서 다시 물어봐요. 나머지 영역 점수는 이번 회차 값이 그대로 유지돼요.</div>';
+  if(low.length)o+='<div style="font-size:11px;color:var(--m);margin-top:8px;line-height:1.6">'+T_NEED+'점 미만 영역만 골라서 다시 물어봐요. 나머지 영역 점수는 이번 회차 값이 그대로 유지돼요.</div>';
   o+='</div></div>';
   return o;
 }
@@ -1680,7 +1835,7 @@ function hRawAnswers(s){
   const cur=rows[sel].r;
   const qs=getQsLang(s.grade,cur.lang||"ko");
   const LK=["","전혀 아니다","아니다","보통","그렇다","매우 그렇다"];
-  o+='<div style="font-size:11px;color:var(--m);margin-bottom:10px">'+hcv(cur.date||"-")+' · 응답자 '+hcv(cur.by||"-")+' · '+(cur.focus?("집중 재진단 "+hcv(cur.focus.join("·"))):"전체 진단")+'</div>';
+  o+='<div style="font-size:11px;color:var(--m);margin-bottom:10px">'+hcv(cur.date||"-")+' · 응답자 '+hcv(cur.by||"-")+' · '+(isFullRound(cur)?"전체 진단(6개 영역)":("영역 재진단 · "+hcv(measuredOf(cur).map(k=>SUBM[k].s).join("·"))))+'</div>';
   o+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   o+='<tr style="background:var(--bg)"><th style="padding:8px;width:34px;color:var(--m);font-weight:700;border-radius:8px 0 0 8px">#</th>';
   o+='<th style="padding:8px;width:42px;color:var(--m);font-weight:700">영역</th>';
@@ -1705,35 +1860,43 @@ function hRawAnswers(s){
 
 // 진단 결과에서 잘한 영역과 도와줄 영역을 뽑아 보여준다.
 // AI 호출 없이 점수만으로 계산하므로 항상 표시된다.
+/* ── 영역별 해석 문구 ──────────────────────────────────────
+   ⚠️ 이 문구는 '학생 자기보고 설문' 결과만으로 만들어진다.
+      교사가 관찰한 행동이 아니다. 따라서 "친구의 감정을 잘 알아차립니다"
+      처럼 실제 행동을 단정하는 표현을 쓰면 안 되고,
+      "~라고 응답했다 / ~하는 경향을 보인다" 처럼
+      응답에 근거한 해석임이 드러나야 한다.
+      실제 행동에 대한 기술은 교사 관찰·지원·협의가 쌓인 뒤
+      종합의견에서 다룬다. */
 const SUBT={
  "정체성 인식":{
-   hi:"자신의 배경과 경험을 긍정적으로 받아들이고, 스스로를 설명할 때 여러 모습을 떠올릴 수 있습니다",
-   lo:"자기를 소개하거나 자신의 경험을 이야기할 때 아직 머뭇거리는 모습이 보입니다",
+   hi:"자신의 배경과 경험을 긍정적으로 받아들이고, 스스로를 여러 모습으로 설명할 수 있다고 응답한 편입니다",
+   lo:"자기를 소개하거나 자신의 경험을 이야기하는 상황에서는 아직 망설이는 쪽을 고른 응답이 많았습니다",
    act:["자기소개 카드 만들기로 좋아하는 것·잘하는 것을 스스로 말해 보게 하기",
         "가족과 함께 '나의 이야기' 한 장면을 그려 오게 한 뒤 학급에서 나누기"]},
  "문화 다양성 이해":{
-   hi:"여러 나라의 문화와 생활 방식에 관심이 많고, 서로 다른 점을 자연스럽게 받아들입니다",
-   lo:"익숙하지 않은 문화를 이해하는 폭이 조금 더 넓어지면 좋겠습니다",
+   hi:"여러 나라의 문화와 생활 방식에 관심을 보이고, 서로 다른 점을 자연스러운 것으로 받아들이는 응답이 많았습니다",
+   lo:"익숙하지 않은 문화를 마주했을 때 그 까닭까지 헤아리기보다 낯설게 여기는 쪽에 답한 경우가 눈에 띕니다",
    act:["세계 여러 나라의 인사말·놀이를 한 가지씩 체험해 보기",
         "다문화 그림책을 함께 읽고 인상 깊은 장면 이야기 나누기"]},
  "편견 인식 및 공감":{
-   hi:"친구의 감정을 잘 알아차리고, 상황을 상대의 입장에서 헤아려 봅니다",
-   lo:"굳어진 생각을 알아차리거나 상대의 마음을 헤아리는 데 도움이 필요합니다",
+   hi:"친구의 감정을 헤아리고 상대의 입장에서 상황을 바라보는 것에 대해 긍정적으로 인식하는 경향을 보입니다",
+   lo:"굳어진 생각을 알아차리거나 상대의 마음을 헤아려야 하는 상황에서는 소극적인 답을 고르는 편입니다",
    act:["역할을 바꿔 보는 활동으로 상대의 입장을 직접 경험하게 하기",
         "감정 카드를 활용해 친구의 마음을 읽고 표현하는 연습하기"]},
  "평등 기반 존중 태도":{
-   hi:"친구를 차별 없이 대하고, 공정하게 행동하려는 태도가 자리 잡혀 있습니다",
-   lo:"서로 다른 점을 존중하는 태도가 조금 더 자라면 좋겠습니다",
+   hi:"친구를 차별 없이 대하고 공정하게 행동하는 것이 옳다고 응답하며, 존중에 대한 인식이 뚜렷한 편입니다",
+   lo:"서로 다른 점을 존중해야 한다는 인식이 조금 더 자리 잡으면 좋겠다는 응답 경향이 보입니다",
    act:["학급 약속을 함께 만들며 '존중'이 무엇인지 우리 말로 정의해 보기",
         "모둠을 정할 때 돌아가며 역할을 맡는 규칙을 함께 정하기"]},
  "문화 간 소통":{
-   hi:"배경이 다른 친구와도 스스럼없이 이야기하고, 뜻이 잘 통하지 않으면 다시 시도합니다",
-   lo:"배경이 다른 친구에게 먼저 말을 걸거나 오해를 풀어가는 일이 아직 어렵습니다",
+   hi:"배경이 다른 친구와 이야기를 나누고, 뜻이 잘 통하지 않을 때 다시 시도하겠다고 답한 문항이 많았습니다",
+   lo:"배경이 다른 친구에게 먼저 말을 걸거나 오해를 풀어가는 상황에서는 물러서는 답을 고른 문항이 여러 개 있었습니다",
    act:["대화를 여는 짧은 문장(같이 할래? 이거 뭐야?)을 함께 연습하기",
         "짝 활동에서 서로 배경이 다른 친구와 자연스럽게 만나도록 자리 구성하기"]},
  "공존 실천 및 협력":{
-   hi:"함께하는 활동에서 자기 몫을 해내고, 같이 하려는 마음이 뚜렷합니다",
-   lo:"함께하는 활동에서 한 걸음 물러서 있는 편입니다",
+   hi:"함께하는 활동에서 자기 몫을 해내고 같이 하려는 의지가 응답에 잘 드러납니다",
+   lo:"함께하는 활동에서는 한 걸음 물러서는 쪽에 답한 경향이 나타납니다",
    act:["역할이 분명하게 나뉜 모둠 과제를 맡겨 기여를 확인시켜 주기",
         "승패보다 협동이 필요한 놀이로 함께하는 즐거움 경험하기"]}
 };
@@ -1746,10 +1909,11 @@ function autoAnalysis(s){
   const hi=rank.slice(0,2), lo=rank.slice(-2).reverse();
   const nm=String(s.name||"이 학생");
 
-  const strong=nm+" 학생은 "+hi.map(([k])=>"‘"+k+"’").join("과 ")+" 영역에서 비교적 안정된 모습을 보입니다. "
-    +SUBT[hi[0][0]].hi+". 또한 "+SUBT[hi[1][0]].hi+".";
+  const strong="진단 응답에서는 "+nm+" 학생의 "+hi.map(([k])=>"‘"+k+"’").join("과 ")
+    +" 영역이 비교적 높게 나타났습니다. "+SUBT[hi[0][0]].hi+". 또한 "+SUBT[hi[1][0]].hi+".";
 
-  const grow=SUBT[lo[0][0]].lo+". "+SUBT[lo[1][0]].lo.replace(/^./,c=>c)+". "
+  const grow="반면 "+lo.map(([k])=>"‘"+k+"’").join("과 ")+" 영역은 상대적으로 낮게 나타났습니다. "
+    +SUBT[lo[0][0]].lo+". "+SUBT[lo[1][0]].lo+". "
     +"부족하다기보다 앞으로 자랄 여지가 있는 부분으로 보아 주시면 좋겠습니다.";
 
   const acts=[SUBT[lo[0][0]].act[0], SUBT[lo[1][0]].act[0]];
@@ -1761,9 +1925,9 @@ function autoAnalysis(s){
     const a=subScores(hh[0].scores)||{}, b=subScores(hh[hh.length-1].scores)||{};
     const ups=SUBS.filter(k=>(Number(b[k])||0)-(Number(a[k])||0)>=5);
     const dns=SUBS.filter(k=>(Number(b[k])||0)-(Number(a[k])||0)<=-5);
-    if(ups.length)trend="지난 회차와 견주면 "+ups.map(k=>"‘"+k+"’").join(", ")+"에서 눈에 띄는 성장이 있었습니다.";
-    else if(dns.length)trend="지난 회차보다 "+dns.map(k=>"‘"+k+"’").join(", ")+"이(가) 내려갔습니다. 최근 학교생활에 변화가 있었는지 살펴봐 주세요.";
-    else trend="지난 회차와 비교하면 전반적으로 비슷한 흐름을 유지하고 있습니다.";
+    if(ups.length)trend="지난 회차 응답과 견주면 "+ups.map(k=>"‘"+k+"’").join(", ")+" 영역의 점수가 눈에 띄게 올랐습니다.";
+    else if(dns.length)trend="지난 회차 응답보다 "+dns.map(k=>"‘"+k+"’").join(", ")+" 영역의 점수가 내려갔습니다. 최근 학교생활에 변화가 있었는지 살펴봐 주세요.";
+    else trend="지난 회차 응답과 비교하면 전반적으로 비슷한 수준을 유지하고 있습니다.";
   }
   const note=(s.tcNote||"").trim();
   return {strong,grow,acts,trend,note,hi,lo};
@@ -1866,12 +2030,53 @@ function hHiLo(s){
    +lo.map(([k,v])=>chip(k,v,"lo")).join("")+'</div>';
   o+='</div>';
 
-  const need=rank.filter(([,v])=>v<60);
+  const need=rank.filter(([,v])=>v<T_NEED);
   if(need.length){
     o+='<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:#FFF0F3;font-size:11.5px;color:#C2334C;line-height:1.65;font-weight:600">'
-     +'60점 미만 '+need.length+'개 영역('+need.map(([k])=>SUBM[k].s).join(", ")+')은 지원 프로그램을 함께 계획해 주세요.</div>';
+     +T_NEED+'점 미만 '+need.length+'개 영역('+need.map(([k])=>SUBM[k].s).join(", ")+')은 지원 프로그램을 함께 계획해 주세요.</div>';
   }
+  o+=hSelfReportNote();
   o+='</div>';
+  return o;
+}
+
+/* 이 화면의 해석이 무엇에 근거한 것인지 밝히는 한 줄.
+   자기보고 진단 결과를 교사 관찰 결과처럼 읽지 않도록 한다. */
+/* ── 학생 상태 판정 ────────────────────────────────────────
+   교사가 목록에서 "누구를 먼저 봐야 하나"를 바로 알 수 있게 한다.
+   판정은 총점이 아니라 '가장 낮은 영역'을 기준으로 한다.
+   총점 85점이어도 한 영역이 40점이면 그 학생은 지원 대상이기 때문.
+
+   ⚠️ 여기에 '재진단 예정' 같은 계획성 항목은 넣지 않는다.
+      아래 넷은 점수에서 나오는 서로 배타적인 상태이고,
+      계획은 교사가 정하는 별개의 축이라 같은 줄에 섞으면
+      "지원 필요이면서 재진단 예정"인 학생을 칠할 수 없다. */
+const ST_NONE={k:"none",lb:"미진단",dot:"⚪",c:"#8A8FA3",bg:"#F2F2F6"};
+function stuState(s){
+  if(!s||!s.scores)return ST_NONE;
+  const r=subScores(s.scores)||{};
+  let lowK=null, lowV=101;
+  SUBS.forEach(k=>{const v=Number(r[k])||0; if(v<lowV){lowV=v;lowK=k;}});
+  if(lowK===null)return ST_NONE;
+  if(lowV<T_NEED)  return {k:"need", lb:"지원 필요", dot:"🔴", c:"#E8445A", bg:"#FFEEF1", lowK:lowK, lowV:lowV};
+  if(lowV<T_GOOD)  return {k:"watch",lb:"관찰 필요", dot:"🟡", c:"#D18A0A", bg:"#FFF6E4", lowK:lowK, lowV:lowV};
+  return               {k:"ok",   lb:"안정",     dot:"🟢", c:"#0E8F68", bg:"#E4F8F1", lowK:lowK, lowV:lowV};
+}
+// 목록·카드에 붙이는 작은 상태 뱃지
+function hStateBadge(st,small){
+  const fs=small?9:10.5;
+  return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:'+fs+'px;font-weight:800;'
+    +'padding:'+(small?"2px 6px":"3px 9px")+';border-radius:20px;background:'+st.bg+';color:'+st.c+';white-space:nowrap">'
+    +st.dot+st.lb+'</span>';
+}
+
+function hSelfReportNote(extra){
+  let o='<div style="margin-top:12px;padding:9px 12px;border-radius:10px;background:var(--bg);border:1px dashed var(--b);display:flex;gap:7px;align-items:flex-start">';
+  o+='<span style="font-size:11px;line-height:1.5">📝</span>';
+  o+='<span style="flex:1;font-size:10.5px;color:var(--m);line-height:1.65">';
+  o+='이 해석은 <strong>학생이 스스로 응답한 진단 자료</strong>에 근거합니다. 교사가 관찰한 실제 행동과는 다를 수 있으니, 관찰·지원·협의 기록과 함께 살펴봐 주세요.';
+  if(extra)o+='<br>'+extra;
+  o+='</span></div>';
   return o;
 }
 
@@ -1885,10 +2090,10 @@ function buildCase(s){
   const items=SUBS.map(k=>{
     const b=Number(first[k])||0, a=Number(last[k])||0;
     return {area:k, before:b, after:a, delta:a-b,
-            need:b<60,                       // 1회차에 지원이 필요했던 영역인가
+            need:b<T_NEED,                       // 1회차에 지원이 필요했던 영역인가
             sups:sups.filter(x=>x.dom===k)};
   });
-  // 지원했거나 60점 미만이었던 영역이 사례의 뼈대다
+  // 지원했거나 T_NEED 미만이었던 영역이 사례의 뼈대다
   const focus=items.filter(x=>x.sups.length||x.need);
   return {
     first:hist[0], last:hist[hist.length-1], rounds:hist.length,
@@ -1929,7 +2134,7 @@ function hCaseReport(s){
 
   if(!c.focus.length){
     o+='<div style="margin-top:12px;padding:13px;border-radius:12px;background:var(--bg);font-size:12px;color:var(--m);line-height:1.75">';
-    o+='1회차에 60점 미만인 영역이 없었고 등록된 지원도 없어요. 지원 프로그램을 기록하면 여기에 사례로 정리됩니다.</div></div>';
+    o+='1회차에 '+T_NEED+'점 미만인 영역이 없었고 등록된 지원도 없어요. 지원 프로그램을 기록하면 여기에 사례로 정리됩니다.</div></div>';
     return o;
   }
 
@@ -2073,18 +2278,18 @@ function hStatBar(title,rows,total,note){
 function hDomainAvg(list){
   const done=list.filter(s=>s.scores);
   let o='<div class="card"><div style="font-size:13px;font-weight:800;margin-bottom:4px">영역별 평균 점수</div>';
-  o+='<div style="font-size:11px;color:var(--m);margin-bottom:14px">진단 완료 '+done.length+'명 기준 · 60점 미만이면 지원 대상이에요</div>';
+  o+='<div style="font-size:11px;color:var(--m);margin-bottom:14px">진단 완료 '+done.length+'명 기준 · '+T_NEED+'점 미만이면 지원 대상이에요</div>';
   if(!done.length){o+='<div style="font-size:12px;color:var(--m)">아직 진단 완료 학생이 없어요.</div></div>';return o;}
   o+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px">';
   const srs=done.map(s=>subScores(s.scores)||{});
   SUBS.forEach(k=>{
     const vs=srs.map(r=>Number(r[k])||0);
     const avg=Math.round(vs.reduce((a,b)=>a+b,0)/vs.length);
-    const low=vs.filter(v=>v<60).length;
+    const low=vs.filter(v=>v<T_NEED).length;
     o+='<div style="padding:13px 14px;border-radius:14px;background:'+SUBM[k].bg+'">';
     o+='<div style="font-size:11px;font-weight:800;color:'+SUBM[k].c+';line-height:1.4">'+k+'</div>';
     o+='<div style="font-size:28px;font-weight:900;color:'+SUBM[k].c+';line-height:1.1;margin-top:5px">'+avg+'<span style="font-size:13px">점</span></div>';
-    o+='<div style="font-size:11px;color:'+SUBM[k].c+';opacity:.85;margin-top:4px">60점 미만 '+low+'명</div></div>';
+    o+='<div style="font-size:11px;color:'+SUBM[k].c+';opacity:.85;margin-top:4px">'+T_NEED+'점 미만 '+low+'명</div></div>';
   });
   o+='</div></div>';return o;
 }
@@ -2199,7 +2404,7 @@ function hRosterFilter(){
   o+='<select id="flt-dom" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:12.5px;color:var(--t);outline:none;font-family:inherit;cursor:pointer"><option value="all"'+(d==="all"?" selected":"")+'>영역 전체</option>'
    +SUBS.map(x=>'<option value="'+hcv(x)+'"'+(d===x?" selected":"")+'>'+hcv(x)+'</option>').join("")+'</select>';
   o+='<select id="flt-cond" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:12.5px;color:var(--t);outline:none;font-family:inherit;cursor:pointer">'
-   +[["all","점수 조건 없음"],["lt60","60점 미만 (지원 필요)"],["60to79","60~79점"],["gte80","80점 이상"],["none","미진단"]]
+   +[["all","점수 조건 없음"],["lt60","🔴 "+T_NEED+"점 미만 (지원 필요)"],["60to79","🟡 "+T_NEED+"~"+(T_GOOD-1)+"점 (관찰 필요)"],["gte80","🟢 "+T_GOOD+"점 이상 (안정)"],["none","⚪ 미진단"]]
     .map(([v,l])=>'<option value="'+v+'"'+(c===v?" selected":"")+'>'+l+'</option>').join("")+'</select>';
   o+='<button id="btn-flt-reset" style="padding:8px 14px;border-radius:9px;border:1.5px solid var(--b);background:var(--s);color:var(--m);font-size:12px;font-weight:700;cursor:pointer">초기화</button>';
   o+='</div></div>';return o;
@@ -2211,9 +2416,9 @@ function applyFilter(list){
   return list.filter(s=>{if(!s.scores)return false;
     const r=subScores(s.scores)||{};
     const vals=d==="all"?SUBS.map(x=>Number(r[x])||0):[Number(r[d])||0];
-    if(c==="lt60")return vals.some(v=>v<60);
-    if(c==="60to79")return vals.some(v=>v>=60&&v<80);
-    if(c==="gte80")return vals.every(v=>v>=80);
+    if(c==="lt60")return vals.some(v=>v<T_NEED);
+    if(c==="60to79")return vals.some(v=>v>=T_NEED&&v<T_GOOD);
+    if(c==="gte80")return vals.every(v=>v>=T_GOOD);
     return true;});
 }
 
@@ -2323,7 +2528,7 @@ function hSupportPanel(s,progs){
   SUBS.forEach(k=>{
     const list=supOf(s,k);
     const sc=srAll?(Number(srAll[k])||0):null;
-    const need=sc!==null&&sc<60;
+    const need=sc!==null&&sc<T_NEED;
     o+='<div style="border-radius:13px;border:1.5px solid var(--b);border-left:4px solid '+SUBM[k].c+';padding:12px 14px;background:var(--s)">';
     o+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:'+(list.length?"10px":"0")+'">';
     o+='<span style="font-size:12.5px;font-weight:800;color:'+SUBM[k].c+'">'+k+'</span>';
@@ -2331,7 +2536,7 @@ function hSupportPanel(s,progs){
     if(need)o+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:#FFF0F3;color:#E8445A">지원 필요</span>';
     o+='<span style="margin-left:auto;font-size:11px;font-weight:700;color:'+(list.length?"var(--t)":"var(--m)")+'">'+list.length+'건</span></div>';
     if(!list.length){
-      o+='<div style="font-size:11.5px;color:var(--m);padding:9px 0 3px">'+(need?"⚠️ 60점 미만이지만 아직 지원 기록이 없어요.":"지원 기록이 없어요.")+'</div>';
+      o+='<div style="font-size:11.5px;color:var(--m);padding:9px 0 3px">'+(need?("⚠️ "+T_NEED+"점 미만이지만 아직 지원 기록이 없어요."):"지원 기록이 없어요.")+'</div>';
     }else{
       list.forEach(x=>{
         o+='<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border-radius:10px;background:var(--bg);margin-bottom:6px">';
@@ -2404,12 +2609,13 @@ function hRadar(sc,sz,showScore){
   const pt=(ratio,k)=>[cx+Math.cos(ang[k])*R*Math.max(ratio,0.04), cy+Math.sin(ang[k])*R*Math.max(ratio,0.04)];
   const gp=(ratio,k)=>[cx+Math.cos(ang[k])*R*ratio, cy+Math.sin(ang[k])*R*ratio];
   let s='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'" style="overflow:visible;display:block" role="img" aria-label="6개 하위영역 진단 결과">';
-  // 눈금 — 60점(지원 기준)과 80점만 강조
-  [0.2,0.4,0.6,0.8,1.0].forEach(ratio=>{
+  // 눈금 — 지원 기준선(T_NEED)과 양호 기준선(T_GOOD)만 강조
+  const RN=T_NEED/100, RG=T_GOOD/100;
+  [0.2,0.4,RN,RG,1.0].forEach(ratio=>{
     const pts=Array.from({length:n},(_,k)=>gp(ratio,k));
-    const on=(ratio===0.6||ratio===0.8);
+    const on=(ratio===RN||ratio===RG);
     s+='<polygon points="'+pts.map(p=>p.map(v=>v.toFixed(1)).join(",")).join(" ")+'" fill="none" stroke="'
-      +(ratio===0.6?"#F0842E":ratio===0.8?"#12A47C":"var(--b)")+'" stroke-width="'+(on?1.3:.7)+'"'
+      +(ratio===RN?"#F0842E":ratio===RG?"#12A47C":"var(--b)")+'" stroke-width="'+(on?1.3:.7)+'"'
       +(on?' stroke-dasharray="4,3"':'')+'/>';
   });
   Array.from({length:n},(_,k)=>{const [x,y]=gp(1,k);
@@ -2417,9 +2623,9 @@ function hRadar(sc,sz,showScore){
   // 데이터 면
   const dp=SUBS.map((k,idx)=>pt((r[k]||0)/100,idx));
   s+='<polygon points="'+dp.map(p=>p.map(v=>v.toFixed(1)).join(",")).join(" ")+'" fill="rgba(91,78,232,.16)" stroke="#5B4EE8" stroke-width="2" stroke-linejoin="round"/>';
-  // 꼭짓점 — 60점 미만은 붉게
+  // 꼭짓점 — 지원 기준 미만은 붉게
   SUBS.forEach((k,idx)=>{const v=r[k]||0;const [x,y]=pt(v/100,idx);
-    s+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.4" fill="'+(v<60?"#E8445A":SUBM[k].c)+'" stroke="#fff" stroke-width="1.5"/>';});
+    s+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.4" fill="'+(v<T_NEED?"#E8445A":SUBM[k].c)+'" stroke="#fff" stroke-width="1.5"/>';});
   // 축 이름
   if(sz>=150){
     SUBS.forEach((k,idx)=>{
@@ -2436,7 +2642,7 @@ function hRadar(sc,sz,showScore){
 function hBars(sc){
   const r=subScores(sc)||{};
   return SUBS.map(k=>{
-    const v=Number(r[k])||0, M=SUBM[k], low=v<60;
+    const v=Number(r[k])||0, M=SUBM[k], low=v<T_NEED;
     return '<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;gap:8px">'
       +'<span style="font-weight:700;color:'+M.c+'">'+k+'</span>'
       +'<span style="font-weight:800;color:'+(low?"#E8445A":M.c)+';flex-shrink:0">'+v+(low?' <span style="font-size:9px">지원필요</span>':'')+'</span></div>'
@@ -2548,7 +2754,7 @@ function hCompareChart(myList, allList, myLabel){
 function hFreq(list,title){
   const done=list.filter(s=>s.scores);
   if(!done.length)return'<div style="text-align:center;padding:30px;color:var(--m);font-size:13px">진단 완료 학생이 없어요.</div>';
-  const BINS=[{l:"0-19",min:0,max:19},{l:"20-39",min:20,max:39},{l:"40-59",min:40,max:59},{l:"60-74",min:60,max:74},{l:"75-89",min:75,max:89},{l:"90-100",min:90,max:100}];
+  const BINS=[{l:"0-19",min:0,max:19},{l:"20-34",min:20,max:34},{l:"35-49",min:35,max:49},{l:"50-69",min:50,max:69},{l:"70-84",min:70,max:84},{l:"85-100",min:85,max:100}];
   const freq={};
   DS.forEach(d=>{freq[d]=BINS.map(b=>{const m=done.filter(s=>s.scores[d]>=b.min&&s.scores[d]<=b.max);return{...b,count:m.length,names:m.map(s=>s.name)};});});
   const maxC=Math.max(1,...DS.flatMap(d=>freq[d].map(b=>b.count)));
@@ -2558,7 +2764,7 @@ function hFreq(list,title){
   let h='<div class="card" style="margin-bottom:14px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">';
   h+='<div><div style="font-size:13px;font-weight:700">'+(title||"UNION 영역별 점수 분포")+'</div>';
-  h+='<div style="font-size:11px;color:var(--m);margin-top:2px">진단 완료 <strong>'+done.length+'명</strong> 기준 · <span style="color:#F5A623">━ 60점</span> <span style="color:#22C79A;margin-left:6px">━ 75점</span> 기준선</div></div>';
+  h+='<div style="font-size:11px;color:var(--m);margin-top:2px">진단 완료 <strong>'+done.length+'명</strong> 기준 · <span style="color:#F5A623">━ '+T_NEED+'점</span> <span style="color:#22C79A;margin-left:6px">━ '+T_GOOD+'점</span> 기준선</div></div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap">';
   DS.forEach(d=>h+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:'+DM[d].c+'"></div><span style="font-size:10px;font-weight:700;color:'+DM[d].c+'">'+d+' 평균 '+avg[d]+'점</span></div>');
   h+='</div></div>';
@@ -2569,8 +2775,8 @@ function hFreq(list,title){
     const W=200,H=BH+50,PL=8,PR=8,PT=24,PB=28;
     const cW=W-PL-PR, cH=H-PT-PB;
     const n=BINS.length, bW=Math.floor(cW/n)-4;
-    const y60=PT+cH-(60/100*cH);
-    const y75=PT+cH-(75/100*cH);
+    const y60=PT+cH-(T_NEED/100*cH);
+    const y75=PT+cH-(T_GOOD/100*cH);
 
     h+='<div style="background:var(--bg);border-radius:12px;padding:12px">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
@@ -2578,19 +2784,19 @@ function hFreq(list,title){
     h+='<span style="font-size:12px;font-weight:800;color:'+DM[d].c+';background:'+DM[d].bg+';padding:2px 8px;border-radius:20px">평균 '+avg[d]+'점</span></div>';
 
     let svg='<svg width="100%" viewBox="0 0 '+W+' '+H+'" style="overflow:visible">';
-    // 60점 기준선
+    // 지원 기준선
     svg+='<line x1="'+PL+'" y1="'+y60+'" x2="'+(W-PR)+'" y2="'+y60+'" stroke="#F5A623" stroke-width="1.5" stroke-dasharray="4,3"/>';
-    svg+='<text x="'+(W-PR+2)+'" y="'+(y60+4)+'" font-size="8" fill="#F5A623" font-family="inherit">60</text>';
-    // 75점 기준선
+    svg+='<text x="'+(W-PR+2)+'" y="'+(y60+4)+'" font-size="8" fill="#F5A623" font-family="inherit">'+T_NEED+'</text>';
+    // 양호 기준선
     svg+='<line x1="'+PL+'" y1="'+y75+'" x2="'+(W-PR)+'" y2="'+y75+'" stroke="#22C79A" stroke-width="1.5" stroke-dasharray="4,3"/>';
-    svg+='<text x="'+(W-PR+2)+'" y="'+(y75+4)+'" font-size="8" fill="#22C79A" font-family="inherit">75</text>';
+    svg+='<text x="'+(W-PR+2)+'" y="'+(y75+4)+'" font-size="8" fill="#22C79A" font-family="inherit">'+T_GOOD+'</text>';
 
     BINS.forEach((b,i)=>{
       const bh_ratio=freq[d][i].count/maxC;
       const bh=Math.max(bh_ratio*cH,freq[d][i].count>0?4:0);
       const x=PL+i*(cW/n)+2;
       const y=PT+cH-bh;
-      const isSupport=b.max<60, isGood=b.min>=75;
+      const isSupport=b.max<T_NEED, isGood=b.min>=T_GOOD;
       const color=isSupport?"#F5A623":isGood?"#22C79A":DM[d].c;
       if(freq[d][i].count>0){
         // 막대
@@ -2620,7 +2826,7 @@ function hFreq(list,title){
   DS.forEach(d=>h+='<th style="text-align:center;padding:6px 8px;color:'+DM[d].c+';font-weight:700">'+d+'</th>');
   h+='</tr></thead><tbody>';
   BINS.forEach((b,i)=>{
-    const isSupport=b.max<60,isGood=b.min>=75;
+    const isSupport=b.max<T_NEED,isGood=b.min>=T_GOOD;
     h+='<tr style="border-bottom:1px solid var(--b);background:'+(isSupport?"#FFF8F0":isGood?"#F0FFF8":"transparent")+'">';
     h+='<td style="padding:6px 8px;font-weight:600;color:var(--t)">'+b.l+'점'+(isSupport?' <span style="font-size:9px;color:#F5A623;background:#FFF3D0;padding:1px 5px;border-radius:3px">지원</span>':'')+(isGood?' <span style="font-size:9px;color:#22C79A;background:#E3FAF4;padding:1px 5px;border-radius:3px">우수</span>':'')+'</td>';
     DS.forEach(d=>{
@@ -2644,12 +2850,12 @@ function hFreq(list,title){
   h+='</tr></tbody></table></div>';
 
   // 지원 필요 요약
-  const ns={};DS.forEach(d=>{const s2=done.filter(s=>s.scores[d]<60);if(s2.length)ns[d]=s2.map(s=>s.name);});
+  const ns={};DS.forEach(d=>{const s2=done.filter(s=>s.scores[d]<T_NEED);if(s2.length)ns[d]=s2.map(s=>s.name);});
   if(Object.keys(ns).length===0){
-    h+='<div style="margin-top:12px;padding:10px 14px;border-radius:10px;background:#E3FAF4;font-size:12px;color:#085041;font-weight:600">🌟 모든 영역 60점 이상! 집중 지원이 필요한 학생이 없어요.</div>';
+    h+='<div style="margin-top:12px;padding:10px 14px;border-radius:10px;background:#E3FAF4;font-size:12px;color:#085041;font-weight:600">🌟 모든 영역 '+T_NEED+'점 이상! 집중 지원이 필요한 학생이 없어요.</div>';
   } else {
     h+='<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:#FFF8F0;border:1px solid #F5A62340">';
-    h+='<div style="font-size:11px;font-weight:700;color:#BA7517;margin-bottom:8px">⚠ 60점 미만 · 집중 지원 필요 학생</div>';
+    h+='<div style="font-size:11px;font-weight:700;color:#BA7517;margin-bottom:8px">⚠ '+T_NEED+'점 미만 · 집중 지원 필요 학생</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
     Object.entries(ns).forEach(([d,names])=>{
       h+='<div style="background:var(--s);border-radius:8px;padding:6px 12px;border:1px solid var(--b)">';
@@ -2667,7 +2873,7 @@ const isExt=fromOutside||(extOrg&&(log.author===extOrg||String(log.author).inclu
 const dot=isExt?"#12A47C":"var(--p)";const bb=isExt?"#E3FAF4":"var(--pl)";const bc=isExt?"#0B7355":"var(--p)";h+='<div style="display:flex;gap:10px;margin-bottom:'+(i<logs.length-1?13:0)+'px"><div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0"><div style="width:7px;height:7px;border-radius:50%;background:'+dot+';margin-top:3px"></div>'+(i<logs.length-1?'<div style="width:1.5px;flex:1;background:var(--b);margin-top:3px"></div>':"")+'</div><div style="flex:1;padding-bottom:3px"><div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-bottom:4px"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:'+bb+';color:'+bc+'">'+(isExt?"🏢 ":"")+hcv(log.author)+'</span>';log.tags.forEach(tg=>h+='<span style="font-size:10px;color:#F27A50;background:#FEF0EB;padding:2px 6px;border-radius:4px">'+tg+'</span>');h+='<span style="font-size:10px;color:var(--m);margin-left:auto">'+log.date+'</span></div><div style="font-size:12px;color:var(--t);line-height:1.65;background:var(--bg);border-radius:7px;padding:7px 10px">'+log.memo+'</div></div></div>';});return h;}
 
 // ── 성장 추이 차트 ────────────────────────────────────────
-function hGrowthChart(scoreHistory){
+function hGrowthChart(scoreHistory, supports){
   if(!scoreHistory||scoreHistory.length<1)return'';
 
   if(scoreHistory.length===1){
@@ -2679,65 +2885,177 @@ function hGrowthChart(scoreHistory){
   }
 
   const n=scoreHistory.length;
-  const W=500, H=240;
-  const PAD={t:40,r:80,b:44,l:44};
+
+  /* ── 지원 레인 ────────────────────────────────────────────
+     점수 변화가 '저절로 생긴 것'이 아니라 어떤 지원 뒤에 일어났는지
+     보이게 한다. 영역별로 한 줄씩 깔고, 시작일에 ▲, 진행 기간만큼 띠.
+     지원 기록에는 종료일이 없어서 회기수를 주 1회로 환산해 추정한다. */
+  const SUP=(supports||[]).filter(x=>x&&SUBS.includes(x.dom)&&x.start);
+  const supBy={}; SUP.forEach(x=>{ (supBy[x.dom]=supBy[x.dom]||[]).push(x); });
+  const lanes=SUBS.filter(k=>supBy[k]&&supBy[k].length);
+  const LANE_H=13, laneBlock=lanes.length?(lanes.length*LANE_H+16):0;
+
+  const W=500, H=240+laneBlock;
+  const PAD={t:40,r:80,b:44+laneBlock,l:44};
   const cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
   const xStep=n>1?cW/(n-1):0;
   const yScale=v=>cH-(v/100*cH);
   const colors={};SUBS.forEach(k=>colors[k]=SUBM[k].c);
-  const SH=scoreHistory.map(r=>({date:r.date,scores:subScores(r.scores)||{}}));
+  const SH=scoreHistory.map(r=>({date:r.date,scores:subScores(r.scores)||{},
+    ms:measuredOf(r), full:isFullRound(r)}));
 
   let svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block;overflow:visible" xmlns="http://www.w3.org/2000/svg">';
 
   // 배경
-  const y60=PAD.t+yScale(60), y80=PAD.t+yScale(80), y0=PAD.t+cH, y100=PAD.t;
+  const y60=PAD.t+yScale(T_NEED), y80=PAD.t+yScale(T_GOOD), y0=PAD.t+cH, y100=PAD.t;
   svg+='<rect x="'+PAD.l+'" y="'+y0+'" width="'+cW+'" height="'+(y0-y60)+'" fill="#FFF8F010"/>';
   svg+='<rect x="'+PAD.l+'" y="'+y80+'" width="'+cW+'" height="'+(y80-y100)+'" fill="#E3FAF415"/>';
 
   // 격자
-  [0,20,40,60,80,100].forEach(v=>{
+  [0,20,40,T_NEED,T_GOOD,60,80,100].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b).forEach(v=>{
     const y=PAD.t+yScale(v);
-    const is60=v===60,is80=v===80;
+    const is60=v===T_NEED,is80=v===T_GOOD;
     svg+='<line x1="'+PAD.l+'" y1="'+y+'" x2="'+(PAD.l+cW)+'" y2="'+y+'" stroke="'+(is60?"#F5A623":is80?"#22C79A":"#EDE8FF")+'" stroke-width="'+(is60||is80?1.5:.8)+'" stroke-dasharray="'+(is60||is80?"5,3":"")+'"/>';
     if(v%20===0||is60||is80)svg+='<text x="'+(PAD.l-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="9" fill="'+(is60?"#F5A623":is80?"#22C79A":"#B0AECA")+'" font-weight="'+(is60||is80?700:400)+'" font-family="inherit">'+v+'</text>';
-    if(is60)svg+='<text x="'+(PAD.l+cW+4)+'" y="'+(y+4)+'" font-size="8" fill="#F5A623" font-family="inherit">60</text>';
-    if(is80)svg+='<text x="'+(PAD.l+cW+4)+'" y="'+(y+4)+'" font-size="8" fill="#22C79A" font-family="inherit">80</text>';
+    if(is60)svg+='<text x="'+(PAD.l+cW+4)+'" y="'+(y+4)+'" font-size="8" fill="#F5A623" font-family="inherit">'+T_NEED+'</text>';
+    if(is80)svg+='<text x="'+(PAD.l+cW+4)+'" y="'+(y+4)+'" font-size="8" fill="#22C79A" font-family="inherit">'+T_GOOD+'</text>';
   });
 
   // 각 영역별 라인 + 값 라벨 (겹침 방지)
+  const endLabels=[], midLabels={};
   SUBS.forEach((d,di)=>{
     const c=colors[d];
     const pts=SH.map((h,i)=>[PAD.l+i*xStep, PAD.t+yScale(Number(h.scores[d])||0)]);
 
-    // 흰 그림자 선
+    // 이 영역을 실제로 잰 회차인지
+    const meas=SH.map(h=>h.ms.indexOf(d)>=0);
+
+    // 흰 그림자 선 (전체 경로)
     svg+='<polyline points="'+pts.map(p=>p.join(",")).join(" ")+'" fill="none" stroke="white" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>';
-    // 실제 선
-    svg+='<polyline points="'+pts.map(p=>p.join(",")).join(" ")+'" fill="none" stroke="'+c+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+
+    // 실제 선 — 구간별로 나눠 그린다.
+    //   양 끝을 모두 측정한 구간 → 실선 (진짜 변화)
+    //   한쪽이라도 이어받은 값이면 → 점선 (측정하지 않은 구간)
+    for(let i=0;i<pts.length-1;i++){
+      const real=meas[i]&&meas[i+1];
+      svg+='<line x1="'+pts[i][0]+'" y1="'+pts[i][1]+'" x2="'+pts[i+1][0]+'" y2="'+pts[i+1][1]+'"'
+        +' stroke="'+c+'" stroke-width="'+(real?2.5:1.8)+'" stroke-linecap="round"'
+        +(real?'':' stroke-dasharray="4,4" opacity=".55"')+'/>';
+    }
 
     pts.forEach(([x,y],i)=>{
       const v=Number(SH[i].scores[d])||0;
       const isLast=i===pts.length-1;
-      svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(isLast?6:4.5)+'" fill="'+(isLast?c:"white")+'" stroke="'+c+'" stroke-width="2.5"/>';
+      const m=meas[i];
+      // 측정한 점은 꽉 채우거나 흰 속, 이어받은 점은 속 빈 작은 점
+      if(m){
+        svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(isLast?6:4.5)+'" fill="'+(isLast?c:"white")+'" stroke="'+c+'" stroke-width="2.5"/>';
+      }else{
+        svg+='<circle cx="'+x+'" cy="'+y+'" r="3" fill="white" stroke="'+c+'" stroke-width="1.4" stroke-dasharray="2,1.6" opacity=".7"/>';
+      }
 
       if(isLast){
-        // 마지막 값: 오른쪽 PAD 영역에 배치 (겹침 없음)
-        // DS 순서로 수직 오프셋 적용 (인지:위, 정의:중간, 행동:아래)
-        const offsets=[-26,-15,-4,7,18,29]; // 6개 영역이 겹치지 않도록
-        const ly=y+offsets[di];
-        svg+='<text x="'+(PAD.l+cW+6)+'" y="'+(ly+4)+'" font-size="11" font-weight="900" fill="'+c+'" font-family="inherit">'+v+'</text>';
-      } else {
-        // 중간 값: 라인 위에 배치, 겹침 방지를 위해 교대로 위/아래
-        const above=di%2===0; // 짝수 영역은 위, 홀수는 아래
-        const ly=above?y-10:y+16;
-        svg+='<text x="'+x+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+c+'" font-family="inherit">'+v+'</text>';
+        // 마지막 값은 한데 모아 두었다가, 겹치지 않게 밀어낸 뒤 그린다.
+        // 고정 오프셋으로는 점수가 몰린 학생에서 숫자가 포개졌다.
+        endLabels.push({y:y, v:v, c:c});
+      } else if(m){
+        // 중간 값은 실제로 잰 것만 모아 둔다. 이어받은 값은 직전과 같은
+        // 숫자라 적어봐야 화면만 뭉친다. 배치는 아래에서 한꺼번에.
+        (midLabels[i]=midLabels[i]||[]).push({y:y,v:v,c:c});
       }
     });
   });
 
   // X축 날짜
+  // ── 겹치는 라벨을 위아래로 밀어내는 공통 처리 ──
+  const spread=(arr,gap,lo,hi)=>{
+    arr.sort((a,b)=>a.y-b.y);
+    for(let i=1;i<arr.length;i++)
+      if(arr[i].y-arr[i-1].y<gap)arr[i].y=arr[i-1].y+gap;
+    const over=arr[arr.length-1].y-hi;
+    if(over>0)arr.forEach(l=>l.y-=over);
+    const under=lo-arr[0].y;
+    if(under>0)arr.forEach(l=>l.y+=under);
+    return arr;
+  };
+
+  // ── 중간 회차 값 라벨 ──
+  Object.keys(midLabels).forEach(k=>{
+    const i=Number(k), arr=midLabels[k];
+    if(!arr.length)return;
+    spread(arr,11,PAD.t+4,PAD.t+cH-2);
+    const x=PAD.l+i*xStep;
+    // 1회차는 Y축 눈금과 겹치므로 오른쪽으로 비켜 적는다
+    const first=i===0;
+    arr.forEach(l=>{
+      svg+='<text x="'+(first?x+9:x)+'" y="'+(l.y+3)+'" text-anchor="'+(first?"start":"middle")+'"'
+        +' font-size="9" font-weight="700" fill="'+l.c+'" font-family="inherit">'+l.v+'</text>';
+    });
+  });
+
+  // ── 마지막 값 라벨 배치 (위아래로 밀어내 겹침 제거) ──
+  if(endLabels.length){
+    spread(endLabels,12.5,PAD.t,PAD.t+cH);
+    endLabels.forEach(l=>{
+      svg+='<text x="'+(PAD.l+cW+6)+'" y="'+(l.y+4)+'" font-size="11" font-weight="900" fill="'+l.c+'" font-family="inherit">'+l.v+'</text>';
+    });
+  }
+
+  // ── 날짜 → x 좌표 (회차 사이는 시간 비례로 끼워 넣는다) ──
+  const tOf=d=>{const t=Date.parse(String(d||"").slice(0,10));return isNaN(t)?null:t;};
+  const rt=SH.map(h=>tOf(h.date));
+  const okT=rt.every(v=>v!=null);
+  function xOfDate(d){
+    const t=tOf(d);
+    if(t==null||!okT)return null;
+    if(t<=rt[0])return PAD.l;
+    if(t>=rt[n-1])return PAD.l+cW;
+    for(let i=0;i<n-1;i++){
+      if(t>=rt[i]&&t<=rt[i+1]){
+        const span=rt[i+1]-rt[i];
+        const f=span>0?(t-rt[i])/span:0;
+        return PAD.l+(i+f)*xStep;
+      }
+    }
+    return PAD.l+cW;
+  }
+  const DAY=86400000;
+
+  // ── 지원 레인 그리기 ──
+  if(lanes.length&&okT){
+    const laneTop=PAD.t+cH+36;
+    // 라벨은 왼쪽 여백에 둔다. 가운데 두면 회차 마커(●◆)와 겹친다.
+    svg+='<text x="'+(PAD.l-6)+'" y="'+(laneTop-6)+'" text-anchor="end" font-size="8" font-weight="800" fill="#8884AA" font-family="inherit">지원</text>';
+    lanes.forEach((k,li)=>{
+      const y=laneTop+li*LANE_H;
+      const c=SUBM[k].c;
+      // 레인 바탕
+      svg+='<rect x="'+PAD.l+'" y="'+y+'" width="'+cW+'" height="'+(LANE_H-4)+'" rx="'+((LANE_H-4)/2)+'" fill="'+c+'" opacity=".07"/>';
+      // 영역 이름
+      svg+='<text x="'+(PAD.l-6)+'" y="'+(y+LANE_H-7)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="'+c+'" opacity=".8" font-family="inherit">'+hcv(SUBM[k].s)+'</text>';
+      supBy[k].forEach(sp=>{
+        const x1=xOfDate(sp.start);
+        if(x1==null)return;
+        const wk=Math.max(1,Number(sp.sessions)||1);          // 회기수 → 주 1회 가정
+        const endT=(tOf(sp.start)||0)+wk*7*DAY;
+        const x2=Math.max(x1+5, xOfDate(new Date(endT).toISOString().slice(0,10))||x1+5);
+        const done=sp.status==="완료";
+        // 진행 띠
+        svg+='<rect x="'+x1.toFixed(1)+'" y="'+y+'" width="'+(x2-x1).toFixed(1)+'" height="'+(LANE_H-4)+'" rx="'+((LANE_H-4)/2)+'" fill="'+c+'" opacity="'+(done?.55:.32)+'"'+(done?'':' stroke="'+c+'" stroke-width=".8" stroke-dasharray="3,2"')+'/>';
+        // 시작 지점 ▲
+        svg+='<text x="'+x1.toFixed(1)+'" y="'+(y+LANE_H-6)+'" text-anchor="middle" font-size="8" font-weight="900" fill="'+c+'" font-family="inherit">▲</text>';
+        // 세로 안내선 — 점수 변화와 시점을 눈으로 잇는다
+        svg+='<line x1="'+x1.toFixed(1)+'" y1="'+PAD.t+'" x2="'+x1.toFixed(1)+'" y2="'+y+'" stroke="'+c+'" stroke-width=".8" stroke-dasharray="2,4" opacity=".3"/>';
+      });
+    });
+  }
+
   scoreHistory.forEach((h,i)=>{
     const x=PAD.l+i*xStep;
     const label=h.date.slice(5).replace('-','/');
+    const full=SH[i].full;
+    // 회차 종류 — 전체 진단은 ●, 영역 재진단은 ◆
+    svg+='<text x="'+x+'" y="'+(PAD.t+cH+20)+'" text-anchor="middle" font-size="10" font-weight="800" fill="'+(full?"#4C6FE8":"#D6417F")+'" font-family="inherit">'+(full?"●":"◆")+'</text>';
     svg+='<text x="'+x+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#8884AA" font-family="inherit">'+label+'</text>';
     svg+='<line x1="'+x+'" y1="'+(PAD.t+cH+4)+'" x2="'+x+'" y2="'+(PAD.t+cH+8)+'" stroke="#C8C6E0" stroke-width="1"/>';
   });
@@ -2749,19 +3067,51 @@ function hGrowthChart(scoreHistory){
   SUBS.forEach(d=>legend+='<div style="display:flex;align-items:center;gap:5px"><div style="width:18px;height:3px;border-radius:2px;background:'+colors[d]+'"></div><span style="font-size:10.5px;color:'+colors[d]+';font-weight:700">'+hcv(d)+'</span></div>');
   legend+='</div>';
 
+  // 그래프 읽는 법
+  const hasRe=SH.some(h=>!h.full), hasSup=lanes.length>0;
+  if(hasRe||hasSup){
+    legend+='<div style="margin-top:9px;padding:10px 12px;border-radius:11px;background:#FAF8FF;border:1px solid #E7E1FA">';
+    legend+='<div style="display:flex;gap:13px;flex-wrap:wrap;justify-content:center;margin-bottom:7px">';
+    legend+='<span style="font-size:10px;font-weight:700;color:#4C6FE8">● 전체 진단</span>';
+    if(hasRe){
+      legend+='<span style="font-size:10px;font-weight:700;color:#D6417F">◆ 영역 재진단</span>';
+      legend+='<span style="font-size:10px;font-weight:700;color:#8884AA">┄ 측정하지 않은 구간</span>';
+    }
+    if(hasSup)legend+='<span style="font-size:10px;font-weight:700;color:#12A47C">▲ 지원 시작 · ▬ 지원 기간</span>';
+    legend+='</div>';
+    if(hasRe)legend+='<div style="font-size:10px;color:#7A6E96;line-height:1.6;text-align:center">점선과 속 빈 점은 그 회차에 <strong>새로 재지 않은 영역</strong>이에요. 직전 값을 그대로 이어받은 것이라 변화로 읽지 마세요.</div>';
+    if(hasSup)legend+='<div style="font-size:10px;color:#7A6E96;line-height:1.6;text-align:center'+(hasRe?';margin-top:5px':'')+'">아래 띠는 지원이 진행된 기간이에요. 진한 띠는 완료, 테두리 있는 띠는 진행 중입니다. <strong>기간은 회기수를 주 1회로 환산한 추정치</strong>예요.</div>';
+    legend+='</div>';
+  }
+
   // 변화량 카드
   const first=scoreHistory[0].scores, last=scoreHistory[scoreHistory.length-1].scores;
   const f6=subScores(first)||{}, l6=subScores(last)||{};
+  // 영역별로 '마지막으로 실제 측정한 회차'를 찾는다.
+  // 그냥 첫 회차와 끝 회차를 빼면, 끝이 영역 재진단일 때
+  // 재지 않은 영역이 변화 0으로 보여 성장이 지워진다.
+  const lastMeasIdx={}, firstMeasIdx={};
+  SUBS.forEach(k=>{
+    for(let i=SH.length-1;i>=0;i--){ if(SH[i].ms.indexOf(k)>=0){ lastMeasIdx[k]=i; break; } }
+    for(let i=0;i<SH.length;i++){ if(SH[i].ms.indexOf(k)>=0){ firstMeasIdx[k]=i; break; } }
+  });
   let changes='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:12px">';
   SUBS.forEach(d=>{
-    const diff=(Number(l6[d])||0)-(Number(f6[d])||0);
+    const li=lastMeasIdx[d], fi=firstMeasIdx[d];
+    const hasBoth=(li!=null&&fi!=null&&li>fi);
+    const av=hasBoth?(Number(SH[fi].scores[d])||0):(Number(f6[d])||0);
+    const bv=hasBoth?(Number(SH[li].scores[d])||0):(Number(l6[d])||0);
+    const diff=bv-av;
     const arrow=diff>0?"↑":diff<0?"↓":"─";
     const col=diff>0?"#22C79A":diff<0?"var(--d)":"var(--m)";
     const bg=diff>0?"#E3FAF4":diff<0?"#FFF0F3":"var(--bg)";
     changes+='<div style="background:'+bg+';border-radius:10px;padding:9px 7px;text-align:center">';
     changes+='<div style="font-size:9.5px;font-weight:700;color:'+SUBM[d].c+';margin-bottom:3px;line-height:1.3">'+hcv(SUBM[d].s)+'</div>';
     changes+='<div style="font-size:20px;font-weight:900;color:'+col+';line-height:1">'+arrow+(diff!==0?Math.abs(diff):'')+'</div>';
-    changes+='<div style="font-size:9px;color:var(--m);margin-top:2px">'+(Number(f6[d])||0)+'→<strong style="color:'+col+'">'+(Number(l6[d])||0)+'</strong></div>';
+    changes+='<div style="font-size:9px;color:var(--m);margin-top:2px">'+av+'→<strong style="color:'+col+'">'+bv+'</strong></div>';
+    // 마지막 측정이 최근 회차가 아니면 언제 잰 값인지 밝힌다
+    if(li!=null&&li<SH.length-1)
+      changes+='<div style="font-size:8.5px;color:var(--m);opacity:.75;margin-top:2px">'+(li+1)+'회차 측정</div>';
     changes+='</div>';
   });
   changes+='</div>';
@@ -2955,7 +3305,7 @@ function hSyncBadge(){
       :hcv(S._syncErr||"눌러서 다시 시도"))+'</div></div>';
 }
 
-function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?("전담교사"+(tcName?" · "+tcName:"")):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"📋",label:"설문 관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
+function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?("전담교사"+(tcName?" · "+tcName:"")):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"🌱",label:"학생 성장관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
 
 function pgBulkAdd(){
   const g=S.tcIsSpecial?(S.bulkGrade||1):S.tcGrade;
@@ -3023,7 +3373,92 @@ function pgBulkAdd(){
   return hLayout(tcSidebar(),body);
 }
 
-function pgSurveyList(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);let body=hTopbar("설문 관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');body+='<div style="padding:16px 20px;max-width:860px"><div style="font-size:13px;color:var(--m);margin-bottom:12px">'+(tcIsSpecial?"전체 학생":"내 반("+tcGrade+"학년 "+tcCls+"반) 학생")+" · 총 "+my.length+"명</div>";if(!my.length){body+='<div class="card" style="padding:34px 24px;text-align:center"><div style="color:var(--m);font-size:13px;margin-bottom:14px;line-height:1.7">등록된 학생이 없어요.<br>명단을 붙여넣으면 한 번에 등록할 수 있어요.</div><button id="btn-bulk2" class="btn-p" style="max-width:260px;margin:0 auto">명단 붙여넣어 등록하기</button></div>';}else{body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">';my.forEach(s=>{body+='<div class="scd" data-id="'+s.id+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px"><div><div style="font-weight:700;font-size:15px">'+s.name+'</div><div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · '+(s.teacher||"담임 미지정")+'</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span>'+(s.scores?'<span style="font-size:9px;color:#22C79A;font-weight:700">✓ 진단완료</span>':'<span style="font-size:9px;color:#F5A623;font-weight:700">미진단</span>')+'</div></div>';if(s.scores){body+='<div style="display:flex;gap:8px;align-items:center">'+hRadar(s.scores,86)+'<div style="flex:1">';DS.forEach(d=>body+='<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span style="width:20px;height:14px;border-radius:3px;background:'+DM[d].bg+';color:'+DM[d].c+';font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center">'+d+'</span><div style="flex:1;height:4px;border-radius:2px;background:#F0EFF8;overflow:hidden"><div style="width:'+s.scores[d]+'%;height:100%;background:'+DM[d].c+'"></div></div><span style="font-size:9px;color:var(--m);width:22px;text-align:right">'+s.scores[d]+'</span></div>');body+='</div></div>';}else body+='<div style="height:58px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--m)">진단 미실시</div>';body+='<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--b);display:flex;justify-content:space-between;font-size:10px;color:var(--m)"><span>기록 '+s.logs.length+'건</span><span>'+s.at+'</span></div></div>';});body+='</div>';}body+='</div>';return hLayout(tcSidebar(),body);}
+function pgSurveyList(){
+  const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;
+  const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);
+  let body=hTopbar("학생 성장관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
+  body+='<div style="padding:16px 20px;max-width:900px">';
+
+  // ── 상태별 요약 + 빠른 필터 ──
+  // 목록을 열자마자 '누구를 먼저 봐야 하는지'가 보이게 한다.
+  const cnt={need:0,watch:0,ok:0,none:0};
+  my.forEach(s=>{cnt[stuState(s).k]++;});
+  const cur=S.fltState||"all";
+  const tabs=[["all","전체",my.length,"var(--p)","var(--pl)","👥"],
+              ["need","지원 필요",cnt.need,"#E8445A","#FFEEF1","🔴"],
+              ["watch","관찰 필요",cnt.watch,"#D18A0A","#FFF6E4","🟡"],
+              ["ok","안정",cnt.ok,"#0E8F68","#E4F8F1","🟢"],
+              ["none","미진단",cnt.none,"#8A8FA3","#F2F2F6","⚪"]];
+  body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-bottom:14px">';
+  tabs.forEach(([k,lb,v,c,bg,dot])=>{
+    const on=cur===k;
+    body+='<button class="stflt" data-k="'+k+'" aria-pressed="'+on+'" style="text-align:left;cursor:pointer;padding:11px 12px;border-radius:13px;'
+      +'border:1.5px solid '+(on?c:"var(--b)")+';background:'+(on?bg:"#fff")+';transition:border-color .15s,background .15s">'
+      +'<div style="font-size:21px;font-weight:900;color:'+c+';line-height:1.05">'+v+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:'+(on?c:"var(--m)")+';margin-top:3px;white-space:nowrap">'+dot+' '+lb+'</div>'
+      +'</button>';
+  });
+  body+='</div>';
+
+  const shown=cur==="all"?my:my.filter(s=>stuState(s).k===cur);
+  body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:11px">'
+    +(tcIsSpecial?"전체 학생":"내 반("+tcGrade+"학년 "+tcCls+"반) 학생")
+    +(cur==="all"?(" · 총 "+my.length+"명"):(" · "+tabs.find(t=>t[0]===cur)[1]+" "+shown.length+"명"))+'</div>';
+
+  if(!my.length){
+    body+='<div class="card" style="padding:34px 24px;text-align:center"><div style="color:var(--m);font-size:13px;margin-bottom:14px;line-height:1.7">등록된 학생이 없어요.<br>명단을 붙여넣으면 한 번에 등록할 수 있어요.</div><button id="btn-bulk2" class="btn-p" style="max-width:260px;margin:0 auto">명단 붙여넣어 등록하기</button></div>';
+  } else if(!shown.length){
+    body+='<div class="card" style="padding:30px 24px;text-align:center;color:var(--m);font-size:13px">이 상태에 해당하는 학생이 없어요. 🙂</div>';
+  } else {
+    // 급한 학생이 위로 오도록: 지원 필요 → 관찰 필요 → 미진단 → 안정
+    const ord={need:0,watch:1,none:2,ok:3};
+    const list=shown.slice().sort((a,b)=>{
+      const A=stuState(a),B=stuState(b);
+      if(ord[A.k]!==ord[B.k])return ord[A.k]-ord[B.k];
+      return (A.lowV==null?999:A.lowV)-(B.lowV==null?999:B.lowV);   // 낮은 영역이 더 낮은 학생 먼저
+    });
+    body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">';
+    list.forEach(s=>{
+      const st=stuState(s);
+      const r=subScores(s.scores)||{};
+      body+='<div class="scd" data-id="'+s.id+'" style="border-left:4px solid '+st.c+'">';
+      // 이름 + 상태
+      body+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:9px">';
+      body+='<div style="min-width:0"><div style="font-weight:700;font-size:15px">'+hcv(s.name)+'</div>';
+      body+='<div style="font-size:11px;color:var(--m);margin-top:2px">'+s.grade+'학년 '+s.cls+'반 · '+hcv(s.teacher||"담임 미지정")+'</div></div>';
+      body+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+hStateBadge(st)
+        +'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--pl);color:var(--p)">'+gg(s.grade)+'</span></div>';
+      body+='</div>';
+
+      if(s.scores){
+        // ⚠️ 총점이 아니라 6개 하위영역을 본다.
+        //    총점 85점 두 학생이라도 낮은 영역이 서로 다르기 때문.
+        body+='<div style="display:flex;gap:9px;align-items:center">'+hRadar(s.scores,84)+'<div style="flex:1;min-width:0">';
+        const rank=SUBS.map(k=>[k,Number(r[k])||0]).sort((a,b)=>a[1]-b[1]);
+        rank.slice(0,3).forEach(([k,v])=>{
+          const c=SUBM[k].c, weak=v<T_NEED;
+          body+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
+            +'<span style="font-size:9px;font-weight:700;color:'+c+';width:44px;flex:0 0 44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+hcv(SUBM[k].s)+'</span>'
+            +'<div style="flex:1;height:5px;border-radius:3px;background:#F0EFF8;overflow:hidden"><div style="width:'+v+'%;height:100%;background:'+c+'"></div></div>'
+            +'<span style="font-size:9.5px;font-weight:'+(weak?800:600)+';color:'+(weak?"#E8445A":"var(--m)")+';width:20px;text-align:right">'+v+'</span></div>';
+        });
+        body+='</div></div>';
+        // 가장 낮은 영역을 한 줄로 못 박아 준다
+        body+='<div style="margin-top:9px;padding:7px 10px;border-radius:9px;background:'+st.bg+';font-size:10.5px;color:'+st.c+';font-weight:700;line-height:1.5">'
+          +(st.k==="ok"?"모든 영역 "+T_GOOD+"점 이상":"가장 낮은 영역 · "+hcv(st.lowK)+" "+st.lowV)+'</div>';
+      } else {
+        body+='<div style="height:64px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11.5px;color:var(--m)">진단 미실시</div>';
+      }
+      // 총점은 참고값으로 작게 남긴다
+      body+='<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--b);display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--m)">';
+      body+='<span>기록 '+(s.logs||[]).length+'건 · 지원 '+(s.supports||[]).length+'건</span>';
+      body+='<span>'+(s.scores?('참고 총점 '+totSc(s.scores)):hcv(s.at||""))+'</span>';
+      body+='</div></div>';
+    });
+    body+='</div>';
+  }
+  body+='</div>';
+  return hLayout(tcSidebar(),body);}
 
 function pgClassView(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);const label=tcIsSpecial?"전체 학생 현황":(tcGrade+"학년 "+tcCls+"반 학급 현황");let body=hTopbar("학급 현황",false);const st=[{lb:"전체",v:my.length,c:"var(--p)"},{lb:"진단완료",v:my.filter(s=>s.scores).length,c:"#22C79A"},{lb:"기록있음",v:my.filter(s=>s.logs.length>0).length,c:"#F27A50"},{lb:"미진단",v:my.filter(s=>!s.scores).length,c:"#F5A623"}];body+='<div style="padding:16px 20px;max-width:900px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';st.forEach(s=>body+='<div class="card" style="padding:11px 14px"><div style="font-size:20px;font-weight:800;color:'+s.c+';line-height:1.1">'+s.v+'</div><div style="font-size:10px;color:var(--m);margin-top:2px">'+s.lb+'</div></div>');body+='</div>'+((!S.tcIsSpecial&&my.length>0)?hCompareChart(my,S.students,tcGrade+'학년 '+tcCls+'반'):'')+hFreq(my,label)+hRosterFilter()+hClassRoster(applyFilter(my))+'</div>';return hLayout(tcSidebar(),body);}
 
@@ -3134,7 +3569,7 @@ if(hist.length>=1){
   body+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   body+='<div style="font-size:13px;font-weight:700">📈 성장 추이</div>';
   body+='<span style="font-size:11px;color:var(--m)">총 '+hist.length+'회 진단</span></div>';
-  body+=hGrowthChart(hist);
+  body+=hGrowthChart(hist, s.supports);
   body+='</div>';
 }
   body+='<div id="sec-raw" class="sec-anchor"></div>'+hRawAnswers(s);
@@ -3161,6 +3596,15 @@ if(hist.length>=1){
     if(fresh)body+='<span style="font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;background:'+(dr.mode==="ai"?"var(--pl)":"var(--bg)")+';color:'+(dr.mode==="ai"?"var(--p)":"var(--m)")+';white-space:nowrap">'+(dr.mode==="ai"?"AI 작성":"자동 작성")+'</span>';
     body+='</div>';
     body+='<div style="font-size:11.5px;color:var(--m);margin:5px 0 12px;line-height:1.65">진단 결과와 기록을 바탕으로 자동으로 작성됩니다. 그대로 쓰시거나 고쳐서 쓰세요.</div>';
+    // 관찰 자료가 비어 있으면 초안이 자기보고에만 기대게 된다. 그 사실을 알린다.
+    {
+      const nNote=((s.tcNote||"").trim()?1:0), nLog=(s.logs||[]).length, nSup=(s.supports||[]).length;
+      if(!nNote&&!nLog&&!nSup){
+        body+='<div style="margin-bottom:12px;padding:10px 12px;border-radius:11px;background:#FFF8EC;border:1px solid #FBE3B8;font-size:11px;color:#8A5B14;line-height:1.65">';
+        body+='⚠️ 아직 <strong>담임 관찰 메모·교사 기록·지원 내역이 없어</strong>, 이 초안은 학생 자기보고 진단 결과만으로 작성됩니다. 관찰한 장면을 한 줄이라도 적어 두시면 실제 모습이 담긴 의견이 만들어져요.';
+        body+='</div>';
+      }
+    }
 
     body+='<div id="neis-loading" style="display:'+(fresh||txt?"none":"flex")+';align-items:center;gap:10px;padding:22px 16px;border-radius:13px;background:var(--bg);margin-bottom:11px">';
     body+='<div style="display:flex;gap:5px"><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .2s infinite"></div><div style="width:7px;height:7px;border-radius:50%;background:var(--p);animation:dp .8s ease-in-out .4s infinite"></div></div>';
@@ -3178,6 +3622,56 @@ if(hist.length>=1){
     body+='</div>';
   }
   return hLayout(tcSidebar(),body);
+}
+
+/* ── 문항 출처·타당도 안내 ─────────────────────────────────
+   연구학교 문항의 근거를 밝혀 도구 신뢰도를 세우는 블록.
+   설문 시작 화면에 넣되, 저학년이 읽기엔 어려운 문구라
+   기본은 접어 두고 필요한 사람만 펼쳐 보게 한다.
+   교수 성함은 아래 VALIDITY_REVIEWERS 만 고치면 전부 반영된다. */
+const VALIDITY_REVIEWERS = "○○대학교 신○○ 교수, ○○대학교 정○○ 교수";
+const VALIDITY = {
+  low:{
+    tag:"상황 기반 진단문항",
+    icon:"🧩",
+    c:"#8B5CF6", bg:"#F5F1FF", bd:"#E3D9FF",
+    lines:[
+      "교육부·여성가족부의 「한국형 다문화수용성 진단도구(KMAI)」 및 다문화교육 관련 선행 연구를 바탕으로 연구학교 운영 목적에 맞게 재구성한 문항입니다.",
+      "저학년 학생의 발달 특성을 고려하여 그림·상황 중심 문항으로 구성하였으며, "+VALIDITY_REVIEWERS+"의 검토와 교사 협의를 통해 학생 눈높이에 맞게 보완하였습니다."
+    ]
+  },
+  high:{
+    tag:"사례-가치 판단 기반 진단문항",
+    icon:"⚖️",
+    c:"#12A47C", bg:"#EAFBF5", bd:"#C8F0E3",
+    lines:[
+      "교육부·여성가족부의 「한국형 다문화수용성 진단도구(KMAI)」와 다문화 감수성·세계시민교육 관련 선행 연구를 바탕으로 연구학교 수준에 맞게 재구성한 문항입니다.",
+      "학생들이 실제 사례 속에서 다양한 관점을 이해하고 판단할 수 있도록 사례·가치판단 중심 문항으로 구성하였으며, "+VALIDITY_REVIEWERS+"의 검토와 교사 협의를 통해 교육적 적합성을 보완하였습니다."
+    ]
+  }
+};
+// open=true 로 주면 처음부터 펼친 상태(교사·보고서용)
+function hValidity(grade, open){
+  const v = (Number(grade)<=2) ? VALIDITY.low : VALIDITY.high;
+  const band = (Number(grade)<=2) ? "1-2학년" : "3-6학년";
+  let o='<details'+(open?" open":"")+' style="margin-top:14px;border:1px solid '+v.bd+';background:'+v.bg+';border-radius:14px;overflow:hidden">';
+  o+='<summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:9px;user-select:none">';
+  o+='<span style="font-size:15px;line-height:1">'+v.icon+'</span>';
+  o+='<span style="flex:1;min-width:0">';
+  o+='<span style="display:block;font-size:9.5px;font-weight:800;letter-spacing:.07em;color:'+v.c+';opacity:.8">문항 출처 · 타당도</span>';
+  o+='<span style="display:block;font-size:12px;font-weight:800;color:'+v.c+';margin-top:2px;line-height:1.35">('+band+') '+v.tag+'</span>';
+  o+='</span>';
+  o+='<span style="font-size:10px;font-weight:700;color:'+v.c+';opacity:.65;white-space:nowrap">자세히</span>';
+  o+='</summary>';
+  o+='<div style="padding:0 14px 14px;border-top:1px dashed '+v.bd+';margin-top:2px;padding-top:11px">';
+  v.lines.forEach(t=>{
+    o+='<div style="display:flex;gap:7px;margin-bottom:8px">';
+    o+='<span style="flex:0 0 4px;height:4px;border-radius:50%;background:'+v.c+';opacity:.5;margin-top:6px"></span>';
+    o+='<span style="flex:1;font-size:11.5px;line-height:1.72;color:#4A4560;letter-spacing:-.01em">'+t+'</span></div>';
+  });
+  o+='<div style="margin-top:10px;padding-top:9px;border-top:1px solid '+v.bd+';font-size:10px;color:'+v.c+';opacity:.75;font-weight:600">김해내동초등학교 다문화교육 연구학교</div>';
+  o+='</div></details>';
+  return o;
 }
 
 function pgSvStart(){
@@ -3226,11 +3720,12 @@ function pgSvStart(){
 
     body+='<button id="btn-sv-go" class="stu-cta" style="background:#F2568E;margin-bottom:9px">'+T.go+'</button>';
     body+='<button id="btn-sv-cx" class="btn-out">'+T.back+'</button>';
+    body+=hValidity(s.grade,false);
     body+='</div></div></div>';
   } else {
     body=hTopbar("진단 설문")+'<div style="max-width:420px;margin:0 auto;padding:20px 16px;text-align:center"><div style="font-size:16px;font-weight:800;margin-bottom:5px">'+s.name+' 학생 UNION 진단</div><div style="font-size:12px;color:var(--m);margin-bottom:18px">'+gg(s.grade)+' · 총 '+qs.length+'문항</div><div class="card" style="margin-bottom:14px;display:flex;gap:8px">';
     DS.forEach(d=>{const cnt=qs.filter(q=>q.d===d).length;body+='<div style="flex:1;background:'+DM[d].bg+';border-radius:10px;padding:10px 5px;text-align:center"><div style="font-size:17px;font-weight:800;color:'+DM[d].c+'">'+cnt+'</div><div style="font-size:9px;font-weight:700;color:'+DM[d].c+';margin-top:1px">'+d+'</div></div>';});
-    body+='</div><button id="btn-sv-go" class="btn-p" style="font-size:14px;margin-bottom:8px">설문 시작하기 →</button><button id="btn-sv-cx" class="btn-out">돌아가기</button></div>';
+    body+='</div><button id="btn-sv-go" class="btn-p" style="font-size:14px;margin-bottom:8px">설문 시작하기 →</button><button id="btn-sv-cx" class="btn-out">돌아가기</button>'+hValidity(s.grade,true)+'</div>';
   }
   return isT?hLayout(tcSidebar(),body):body;
 }
@@ -3400,7 +3895,7 @@ function pgResult(){
     body+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:16px">';
     SUBS.forEach(k=>{
       const v=Number(r[k])||0;
-      const isGood=v>=75,isWeak=v<60;
+      const isGood=v>=T_GOOD,isWeak=v<T_NEED;
       body+='<div style="background:'+SUBM[k].c+';border-radius:18px;padding:14px 10px;color:#fff;text-align:center">';
       body+='<div style="font-size:11px;opacity:.9;font-weight:700;line-height:1.35;min-height:29px;display:flex;align-items:center;justify-content:center">'+hcv(k)+'</div>';
       body+='<div style="font-size:32px;font-weight:900;margin:3px 0;line-height:1">'+v+'</div>';
@@ -3695,20 +4190,20 @@ function pgSupport(){
   const sl=tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls);
   const done=sl.filter(s=>s.scores);
   const needSupport={};
-  SUBS.forEach(k=>{const ns=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<60;});if(ns.length)needSupport[k]=ns;});
+  SUBS.forEach(k=>{const ns=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<T_NEED;});if(ns.length)needSupport[k]=ns;});
   const totalNeed=new Set(Object.values(needSupport).flat().map(s=>s.id)).size;
   let body=hTopbar("지원 프로그램 관리",false);
   body+='<div style="padding:16px 20px;max-width:900px">';
   body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:14px;font-weight:600">'
     +(tcIsSpecial?"학교 전체":(tcGrade+"학년 "+tcCls+"반"))+' · 진단 완료 '+done.length+'명</div>';
   // 요약 카드
-  body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center"><div style="font-size:30px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:12px;color:var(--m);margin-top:3px">60점 미만이 하나라도 있는 학생</div></div>';
+  body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center"><div style="font-size:30px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:12px;color:var(--m);margin-top:3px">'+T_NEED+'점 미만이 하나라도 있는 학생</div></div>';
   body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
   SUBS.forEach(k=>{const cnt=(needSupport[k]||[]).length;
     body+='<div class="card" style="padding:13px;text-align:center;border-left:4px solid '+SUBM[k].c+'"><div style="font-size:22px;font-weight:900;color:'+SUBM[k].c+'">'+cnt+'</div><div style="font-size:10.5px;color:var(--m);margin-top:3px;line-height:1.4">'+hcv(k)+'</div></div>';});
   body+='</div>';
   if(Object.keys(needSupport).length===0){
-    body+='<div class="card" style="padding:40px;text-align:center;color:var(--m)">🌟 모든 학생이 60점 이상이에요!</div>';
+    body+='<div class="card" style="padding:40px;text-align:center;color:var(--m)">🌟 모든 학생이 '+T_NEED+'점 이상이에요!</div>';
   } else {
     body+='<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">';
     SUBS.forEach(d=>{
@@ -3827,7 +4322,7 @@ function pgExtDetail(){const s=S.students.find(x=>x.id===S.sid);if(!s)return"";c
 body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div style="width:42px;height:42px;border-radius:13px;background:#E3FAF4;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#12A47C;flex-shrink:0">'+s.grade+'-'+s.cls+'</div><div><div style="font-size:15px;font-weight:800">'+hcv(maskName(s.name))+'</div><div style="font-size:11px;color:var(--m);margin-top:3px">'+s.grade+'학년 '+s.cls+'반</div></div></div>';if(s.scores){
   // 점수는 보여주지 않고, 지원이 필요한 영역만 알려준다
   const _r=subScores(s.scores)||{};
-  const need=SUBS.filter(k=>(Number(_r[k])||0)<60);
+  const need=SUBS.filter(k=>(Number(_r[k])||0)<T_NEED);
   body+='<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:9px;color:var(--m)">지원이 필요한 영역</div>';
   if(need.length){
     body+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
@@ -3877,7 +4372,7 @@ async function genNeis(s){
   const hist2=s.scoreHistory||[];
   const trend=hist2.length>=2?("\n\n[회차별 변화]\n"+hist2.map((r,i)=>{const rr=subScores(r.scores)||{};
     return "  "+(i+1)+"회차("+(r.date||"-")+"): "+SUBS.map(k=>SUBM[k].s+" "+(rr[k]||0)).join(", ")+" / 총점 "+totSc(r.scores);}).join("\n")):"";
-  const prompt=persona+"\n\n아래 학생의 진단 결과와 교사 관찰을 바탕으로 NEIS 학교생활기록부 종합의견 초안을 작성해주세요.\n\n[학생 정보]\n- 학생 식별번호: "+anonId(s)+" (실명 아님. 답변에서는 '이 학생'으로만 지칭)\n- 학년군: "+(s.grade<=2?"1~2학년":s.grade<=3?"3학년":"4~6학년")+"\n- 학생 유형: "+(s.stype||"일반학생")+"\n\n[UNION 다문화 역량 진단 — 6개 하위영역]\n"+sLines+"\n- 가장 높은 영역: "+sorted2[0][0]+"("+sorted2[0][1]+"점), "+sorted2[1][0]+"("+sorted2[1][1]+"점)\n- 가장 낮은 영역: "+sorted2[sorted2.length-1][0]+"("+sorted2[sorted2.length-1][1]+"점), "+sorted2[sorted2.length-2][0]+"("+sorted2[sorted2.length-2][1]+"점)"+trend+"\n\n[담임 관찰 메모]\n"+(note?("  "+note):"  (작성 없음)")+"\n\n[교사 기록]\n"+logLines+"\n\n[작성 지침]\n0. 담임 관찰 메모가 있으면 반드시 반영하되 그대로 옮기지 말고 재서술할 것\n1. 종합의견 분량: "+S.neisCh+"자 내외\n2. NEIS 종합의견 문체(3인칭)\n3. 부족한 영역도 성장 가능성 중심으로 쓸 것\n4. 구체적 활동 사례 포함\n5. 다문화, UNION, 점수 표현 금지\n5-1. 학생을 부를 때는 '이 학생'으로만 지칭하고, 식별번호나 국가명은 문장에 넣지 말 것\n5-2. 학년군에 맞는 발달 수준으로 서술할 것\n6. 마지막 문장은 성장 기대로 마무리\n7. 아래 형식을 반드시 지켜서 출력할 것. 다른 머리말은 붙이지 말 것\n\n[빛나는 점]\n(가장 높은 두 영역을 근거로, 교실에서 관찰되는 장면 중심으로 2~3문장)\n\n[키워갈 점]\n(가장 낮은 두 영역을 근거로, 부족함이 아니라 앞으로 자랄 여지로 서술. 교사가 바로 해볼 수 있는 방법 한 가지 포함. 2~3문장)\n\n[종합의견]\n(NEIS 기재용 초안 "+S.neisCh+"자 내외)";
+  const prompt=persona+"\n\n아래 학생의 진단 결과와 교사 관찰을 바탕으로 NEIS 학교생활기록부 종합의견 초안을 작성해주세요.\n\n[학생 정보]\n- 학생 식별번호: "+anonId(s)+" (실명 아님. 답변에서는 '이 학생'으로만 지칭)\n- 학년군: "+(s.grade<=2?"1~2학년":s.grade<=3?"3학년":"4~6학년")+"\n- 학생 유형: "+(s.stype||"일반학생")+"\n\n[UNION 다문화 역량 진단 — 6개 하위영역 · 학생 자기보고 설문 결과]\n"+sLines+"\n- 가장 높은 영역: "+sorted2[0][0]+"("+sorted2[0][1]+"점), "+sorted2[1][0]+"("+sorted2[1][1]+"점)\n- 가장 낮은 영역: "+sorted2[sorted2.length-1][0]+"("+sorted2[sorted2.length-1][1]+"점), "+sorted2[sorted2.length-2][0]+"("+sorted2[sorted2.length-2][1]+"점)"+trend+"\n\n[담임 관찰 메모]\n"+(note?("  "+note):"  (작성 없음)")+"\n\n[교사 기록]\n"+logLines+"\n\n[작성 지침]\n0. 담임 관찰 메모가 있으면 반드시 반영하되 그대로 옮기지 말고 재서술할 것\n1. 종합의견 분량: "+S.neisCh+"자 내외\n2. NEIS 종합의견 문체(3인칭)\n3. 부족한 영역도 성장 가능성 중심으로 쓸 것\n4. 구체적 활동 사례 포함\n5. 다문화, UNION, 점수 표현 금지\n5-1. 학생을 부를 때는 '이 학생'으로만 지칭하고, 식별번호나 국가명은 문장에 넣지 말 것\n5-2. 학년군에 맞는 발달 수준으로 서술할 것\n6. 마지막 문장은 성장 기대로 마무리\n6-1. 진단 점수는 학생이 스스로 응답한 자기보고 자료다. 교사 관찰 메모·기록에 없는 내용을 관찰된 행동처럼 단정하지 말 것\n7. 아래 형식을 반드시 지켜서 출력할 것. 다른 머리말은 붙이지 말 것\n\n[빛나는 점]\n(가장 높은 두 영역을 근거로 2~3문장. 교사 관찰 메모·기록에 있는 내용만 실제 행동으로 서술하고, 그 밖에는 '~에 대해 긍정적으로 인식하는 편' 처럼 응답에 근거한 표현을 쓸 것. 관찰하지 않은 장면을 지어내지 말 것)\n\n[키워갈 점]\n(가장 낮은 두 영역을 근거로, 부족함이 아니라 앞으로 자랄 여지로 서술. 교사가 바로 해볼 수 있는 방법 한 가지 포함. 2~3문장)\n\n[종합의견]\n(NEIS 기재용 초안 "+S.neisCh+"자 내외)";
   try{
     const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-5",max_tokens:1024,messages:[{role:"user",content:prompt}]})});
     if(!res.ok){
@@ -4197,6 +4692,10 @@ function bindEv(){
     });
     on("btn-bulk",()=>set({menu:"bulkAdd",bulkText:""}));
     on("btn-bulk2",()=>set({menu:"bulkAdd",bulkText:""}));
+    onA(".stflt",e=>{
+      const k=e.currentTarget.dataset.k;
+      set({fltState:(S.fltState||"all")===k?"all":k});   // 같은 걸 다시 누르면 해제
+    });
     onA(".scd",e=>{set({sid:e.currentTarget.dataset.id,menu:"detail",lAuth:S.tcIsSpecial?"전담교사":"담임교사",lTags:[],lMemo:"",neisText:""});});
   }
 
@@ -4536,13 +5035,17 @@ function bindEv(){
       const fd=S.focusDoms;
       const part=calcSc(ans,s.grade,S.surveyLang||"ko",fd);
       const scores=rollup((fd&&fd.length)?{...(s.scores||{}),...part}:part);
+      // 실제로 새로 측정한 영역만 기록해 둔다 (재진단 회차 구분용)
+      const measured=(fd&&fd.length)?SUBS.filter(k=>fd.includes(k)||fd.includes(SUBM[k].d)):SUBS.slice();
       const newEntry={date:td(),scores,focus:(fd&&fd.length)?fd.slice():null,
-        ans:{...ans}, lang:S.surveyLang||"ko", by:(S.role==="teacher"?"교사":"학생")};
+        measured, ans:{...ans}, lang:S.surveyLang||"ko", by:(S.role==="teacher"?"교사":"학생")};
       const updatedStudents=S.students.map(x=>{
         if(x.id!==sid)return x;
         const hist=x.scoreHistory||[];
         // 같은 날 같은 결과가 이미 있으면 새 회차를 만들지 않는다
-        const key=v=>(v.date||"")+"|"+SUBS.map(k=>(subScores(v.scores)||{})[k]).join(",");
+        // 회차 종류까지 포함해 비교한다. 같은 날 전체 진단과 영역 재진단을
+        // 모두 했는데 점수가 같다고 뒤엣것을 삼켜 버리면 안 된다.
+        const key=v=>(v.date||"")+"|"+measuredOf(v).join("/")+"|"+SUBS.map(k=>(subScores(v.scores)||{})[k]).join(",");
         const dup=hist.length&&key(hist[hist.length-1])===key(newEntry);
         return{...x,scores,scoreHistory:dup?hist:[...hist,newEntry]};
       });
