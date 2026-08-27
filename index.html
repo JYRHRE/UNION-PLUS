@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-08-24-09"/>
+<meta name="app-version" content="2026-08-24-10"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -868,6 +868,7 @@ const S={
   msg:"", neisText:"", neisCh:300,
   coaches:loadCoach(), coachSel:"basic", coachEdit:null,
   focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0], fltState:"all",
+  viewGrade:0, viewCls:0,
   rawOpen:false, rawTab:null, loginEmail:"", loggingIn:false, diag:null, diagRunning:false,
   bulkText:"", bulkGrade:1, bulkCls:1,
   fltDom:"all", fltCond:"all", teamOpen:false,
@@ -958,7 +959,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-08-24-09";
+const APP_VERSION = "2026-08-24-10";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1229,6 +1230,69 @@ async function saveTcProfile(prof){
 }
 
 // 로그인 응답이나 이 기기 캐시에서 선생님 정보를 꺼낸다
+/* ── 성과발표회 참관용 계정 ────────────────────────────────
+   아래 다섯 아이디는 참관하시는 분들이 직접 만져 보는 계정이다.
+   학년 자리가 00이라 전담교사로 들어와 전체 학생을 보게 되는데,
+   그대로 두면 전교생이 한 화면에 쏟아져 살펴보기 어렵다.
+   그래서 이 계정에만 학년·반 범위를 고르는 줄을 붙인다.
+   계정을 추가하려면 이 목록에만 넣으면 된다. */
+const DEMO_IDS=["20260000","20260001","20260002","20260003","20260004"];
+function acctId(){
+  let e=SB_EMAIL||"";
+  if(!e){try{e=localStorage.getItem("sb_email")||"";}catch(x){}}
+  return String(e).split("@")[0].trim();
+}
+const isDemoAcct=()=>DEMO_IDS.indexOf(acctId())>=0;
+
+/* 지금 고른 범위로 학생을 걸러 낸다.
+   viewGrade 0 = 전학년, viewCls 0 = 그 학년 전체 */
+function scopeStudents(list){
+  if(!isDemoAcct())return list;
+  const g=Number(S.viewGrade)||0, c=Number(S.viewCls)||0;
+  if(!g)return list;
+  return (list||[]).filter(s=>Number(s.grade)===g&&(!c||Number(s.cls)===c));
+}
+// 지금 보고 있는 범위를 사람이 읽는 말로
+function scopeLabel(){
+  if(!isDemoAcct())return "전체 학생";
+  const g=Number(S.viewGrade)||0, c=Number(S.viewCls)||0;
+  if(!g)return "전학년";
+  return g+"학년"+(c?(" "+c+"반"):" 전체");
+}
+
+/* 학년·반 고르는 줄. 반 목록은 실제 등록된 학생에서 뽑아 쓴다.
+   학년마다 반 수가 다를 수 있어 숫자를 박아 두지 않는다. */
+function hScopeBar(){
+  if(!isDemoAcct())return "";
+  const all=S.students||[];
+  const grades=[...new Set(all.map(s=>Number(s.grade)).filter(g=>g>=1&&g<=6))].sort((a,b)=>a-b);
+  const g=Number(S.viewGrade)||0, c=Number(S.viewCls)||0;
+  const btn=(on,lb,attrs)=>'<button '+attrs+' style="padding:7px 13px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;'
+    +'border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+lb+'</button>';
+
+  let o='<div class="card" style="padding:13px 15px;margin-bottom:14px">';
+  o+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">';
+  o+='<span style="font-size:12.5px;font-weight:800">🏫 반별 보기</span>';
+  o+='<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--pl);color:var(--p)">'+hcv(scopeLabel())+'</span>';
+  o+='<span style="flex:1"></span>';
+  o+='<span style="font-size:10.5px;color:var(--m)">'+scopeStudents(all).length+'명</span></div>';
+
+  o+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  o+=btn(!g,"전학년",'class="scg" data-g="0"');
+  grades.forEach(x=>{o+=btn(g===x,x+"학년",'class="scg" data-g="'+x+'"');});
+  o+='</div>';
+
+  if(g){
+    const clss=[...new Set(all.filter(s=>Number(s.grade)===g).map(s=>Number(s.cls)))].sort((a,b)=>a-b);
+    o+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:9px;border-top:1px dashed var(--b)">';
+    o+=btn(!c,g+"학년 전체",'class="scc" data-c="0"');
+    clss.forEach(x=>{o+=btn(c===x,x+"반",'class="scc" data-c="'+x+'"');});
+    o+='</div>';
+  }
+  o+='</div>';
+  return o;
+}
+
 function parseAcct(email){
   const id=String(email||"").split("@")[0].trim();
   if(!/^\d{8}$/.test(id))return null;
@@ -3305,11 +3369,11 @@ function hSyncBadge(){
       :hcv(S._syncErr||"눌러서 다시 시도"))+'</div></div>';
 }
 
-function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?("전담교사"+(tcName?" · "+tcName:"")):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"🌱",label:"학생 성장관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
+function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?(isDemoAcct()?("참관용 계정 · "+scopeLabel()):("전담교사"+(tcName?" · "+tcName:""))):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"🌱",label:"학생 성장관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
 
 function pgBulkAdd(){
-  const g=S.tcIsSpecial?(S.bulkGrade||1):S.tcGrade;
-  const c=S.tcIsSpecial?(S.bulkCls||1):S.tcCls;
+  const g=S.tcIsSpecial?(S.bulkGrade||(isDemoAcct()&&Number(S.viewGrade))||1):S.tcGrade;
+  const c=S.tcIsSpecial?(S.bulkCls||(isDemoAcct()&&Number(S.viewCls))||1):S.tcCls;
   const parsed=S.bulkText?parseRoster(S.bulkText,g,c):null;
   const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
 
@@ -3375,9 +3439,10 @@ function pgBulkAdd(){
 
 function pgSurveyList(){
   const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;
-  const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);
+  const my=scopeStudents(tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls));
   let body=hTopbar("학생 성장관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
   body+='<div style="padding:16px 20px;max-width:900px">';
+  body+=hScopeBar();
 
   // ── 상태별 요약 + 빠른 필터 ──
   // 목록을 열자마자 '누구를 먼저 봐야 하는지'가 보이게 한다.
@@ -3402,7 +3467,7 @@ function pgSurveyList(){
 
   const shown=cur==="all"?my:my.filter(s=>stuState(s).k===cur);
   body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:11px">'
-    +(tcIsSpecial?"전체 학생":"내 반("+tcGrade+"학년 "+tcCls+"반) 학생")
+    +(tcIsSpecial?(isDemoAcct()?(scopeLabel()+" 학생"):"전체 학생"):("내 반("+tcGrade+"학년 "+tcCls+"반) 학생"))
     +(cur==="all"?(" · 총 "+my.length+"명"):(" · "+tabs.find(t=>t[0]===cur)[1]+" "+shown.length+"명"))+'</div>';
 
   if(!my.length){
@@ -3460,7 +3525,29 @@ function pgSurveyList(){
   body+='</div>';
   return hLayout(tcSidebar(),body);}
 
-function pgClassView(){const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;const my=tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls);const label=tcIsSpecial?"전체 학생 현황":(tcGrade+"학년 "+tcCls+"반 학급 현황");let body=hTopbar("학급 현황",false);const st=[{lb:"전체",v:my.length,c:"var(--p)"},{lb:"진단완료",v:my.filter(s=>s.scores).length,c:"#22C79A"},{lb:"기록있음",v:my.filter(s=>s.logs.length>0).length,c:"#F27A50"},{lb:"미진단",v:my.filter(s=>!s.scores).length,c:"#F5A623"}];body+='<div style="padding:16px 20px;max-width:900px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';st.forEach(s=>body+='<div class="card" style="padding:11px 14px"><div style="font-size:20px;font-weight:800;color:'+s.c+';line-height:1.1">'+s.v+'</div><div style="font-size:10px;color:var(--m);margin-top:2px">'+s.lb+'</div></div>');body+='</div>'+((!S.tcIsSpecial&&my.length>0)?hCompareChart(my,S.students,tcGrade+'학년 '+tcCls+'반'):'')+hFreq(my,label)+hRosterFilter()+hClassRoster(applyFilter(my))+'</div>';return hLayout(tcSidebar(),body);}
+function pgClassView(){
+  const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;
+  const my=scopeStudents(tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls));
+  const label=tcIsSpecial?(isDemoAcct()?(scopeLabel()+" 현황"):"전체 학생 현황"):(tcGrade+"학년 "+tcCls+"반 학급 현황");
+  let body=hTopbar("학급 현황",false);
+  const st=[{lb:"전체",v:my.length,c:"var(--p)"},
+            {lb:"진단완료",v:my.filter(s=>s.scores).length,c:"#22C79A"},
+            {lb:"기록있음",v:my.filter(s=>(s.logs||[]).length>0).length,c:"#F27A50"},
+            {lb:"미진단",v:my.filter(s=>!s.scores).length,c:"#F5A623"}];
+  body+='<div style="padding:16px 20px;max-width:900px">';
+  body+=hScopeBar();
+  body+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  st.forEach(x=>body+='<div class="card" style="padding:11px 14px"><div style="font-size:20px;font-weight:800;color:'+x.c+';line-height:1.1">'+x.v+'</div><div style="font-size:10px;color:var(--m);margin-top:2px">'+x.lb+'</div></div>');
+  body+='</div>';
+  if(!my.length){
+    body+='<div class="card" style="padding:30px 24px;text-align:center;color:var(--m);font-size:13px">이 범위에 등록된 학생이 없어요.</div></div>';
+    return hLayout(tcSidebar(),body);
+  }
+  // 특정 반을 고른 상태라면 학교 전체와 견주는 비교 차트가 의미를 갖는다
+  const oneCls=(!tcIsSpecial)||(isDemoAcct()&&Number(S.viewGrade)&&Number(S.viewCls));
+  body+=(oneCls?hCompareChart(my,S.students,tcIsSpecial?scopeLabel():(tcGrade+'학년 '+tcCls+'반')):'')
+    +hFreq(my,label)+hRosterFilter()+hClassRoster(applyFilter(my))+'</div>';
+  return hLayout(tcSidebar(),body);}
 
 function pgSchoolView(){
   const{students:sl,schoolFilter}=S;
@@ -4674,8 +4761,23 @@ function bindEv(){
   }
 
   // ── 교사 설문관리 ──
+  // ── 반별 보기 (성과발표회 계정) : 두 화면 모두에서 쓴다 ──
+  if(page==="teacher"&&(menu==="survey"||menu==="classView")){
+    onA(".scg",e=>{
+      const g=Number(e.currentTarget.dataset.g)||0;
+      set({viewGrade:g, viewCls:0, fltState:"all"});   // 학년을 바꾸면 반 선택과 상태 필터는 푼다
+    });
+    onA(".scc",e=>{
+      set({viewCls:Number(e.currentTarget.dataset.c)||0, fltState:"all"});
+    });
+  }
+
   if(page==="teacher"&&menu==="survey"){
-    on("btn-add",()=>set({menu:"formAdd",form:{name:"",grade:S.tcGrade,cls:S.tcCls,teacher:S.tcIsSpecial?"":S.tcName},fe:{}}));
+    on("btn-add",()=>set({menu:"formAdd",form:{
+      name:"",
+      grade:(isDemoAcct()&&Number(S.viewGrade))?Number(S.viewGrade):S.tcGrade,
+      cls:(isDemoAcct()&&Number(S.viewCls))?Number(S.viewCls):S.tcCls,
+      teacher:S.tcIsSpecial?"":S.tcName},fe:{}}));
     // 학생 카드 삭제 버튼
     document.querySelectorAll(".scd-del-btn").forEach(btn=>{
       btn.addEventListener("click", e=>{
