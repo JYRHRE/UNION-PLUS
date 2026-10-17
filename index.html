@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-10-02-01"/>
+<meta name="app-version" content="2026-10-06-04"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -123,6 +123,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   font-family:inherit;transition:background .15s,color .15s,border-color .15s}
 .dtab:hover{border-color:#B9B1F5;color:var(--p)}
 .dtab.on{background:var(--p);border-color:transparent;color:#fff}
+/* 단계 표시 — STEP 1 진단 → STEP 2 지원 → STEP 3 성장 → STEP 4 기록 */
+.dstep{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:6px 11px 6px 6px;
+  border-radius:20px;font-size:11.5px;font-weight:800;white-space:nowrap;letter-spacing:-.01em}
+.dstep-n{width:17px;height:17px;border-radius:50%;color:#fff;font-size:10px;font-weight:900;
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.dsep{flex-shrink:0;align-self:center;color:#C8C4DE;font-size:13px;font-weight:700;padding:0 1px}
 /* 탭·상단바에 가리지 않게 여유를 둔다 */
 .sec-anchor{scroll-margin-top:112px;display:block;height:0}
 @media print{.dtabs{display:none!important}}
@@ -224,8 +230,16 @@ const DS=["인지","정의","행동"];
    점수는 0~100 확장 스케일(최하 응답=0, 최고 응답=100)이다.
    옛 20~100 스케일의 60점 커트라인은 새 스케일 50점과 같은 자리다.
    기준을 조정하려면 이 두 값만 고치면 화면 전체가 따라온다. */
-const T_NEED = 50;   // 이 점수 미만이면 집중 지원 대상
+const T_NEED = 50;   // 이 점수 미만이면 맞춤지원 검토 대상
 const T_GOOD = 70;   // 이 점수 이상이면 양호
+
+/* ⚠️ 이 두 값은 통계적 표준점수나 타당화된 절단점(cut-off)이 아니라
+   학교가 정한 운영 기준이다. 성과보고회에서 "50점이라는 기준은 어떤
+   근거로 정했습니까?"라는 질문이 나올 수 있으므로, 화면에서도
+   '집중지원 필요 학생'처럼 단정하지 않고 '맞춤지원 검토 대상'으로
+   적는다. 아래 두 문구를 화면 곳곳에서 함께 쓴다. */
+const T_LABEL_NEED = "맞춤지원 검토 대상";
+const T_NOTE = "학교 맞춤지원 참고 기준 : "+T_NEED+"점 미만";
 
 // ── 진단 하위영역 6개 (실제 분석 단위) ────────────────────
 const SUBS=["정체성 인식","문화 다양성 이해","편견 인식 및 공감","평등 기반 존중 태도","문화 간 소통","공존 실천 및 협력"];
@@ -290,6 +304,12 @@ const FLAG={"대한민국":"\uD83C\uDDF0\uD83C\uDDF7","베트남":"\uD83C\uDDFB\
 const STYPES=["국제결혼가정(국내출생)","국제결혼가정(중도입국)","외국인가정","탈북학생","일반학생"];
 const STY_C={"국제결혼가정(국내출생)":"#5B6EE8","국제결혼가정(중도입국)":"#F5A623","외국인가정":"#22C79A","탈북학생":"#E8445A","일반학생":"#8A8FA3"};
 const SUP_ST=["예정","진행중","완료"];
+/* 지원을 결정·기록한 근거.
+   ⚠️ 연구학교 1년차에는 진단과 지원이 순서대로 일어나지 않았다. 시스템 개발과
+      학교 활동이 나란히 진행됐기 때문이다. 그래서 '진단을 보고 지원했다'만
+      고를 수 있게 하면 없는 일을 적게 된다.
+      이미 참여 중이던 활동을 뒤늦게 연계 기록하는 경우를 첫 항목으로 둔다. */
+const SUP_WHY=["기존 참여 활동을 연계 기록","진단 결과에서 지원 검토","담임 관찰에서 추가 지원 필요","학생·보호자 요청","협력지원팀 협의"];
 const SUP_ST_C={"예정":"#8A8FA3","진행중":"#F5A623","완료":"#22C79A"};
 function hFlag(c){return FLAG[c]||"\uD83C\uDF0F";}
 
@@ -868,7 +888,8 @@ const S={
   msg:"", neisText:"", neisCh:300,
   coaches:loadCoach(), coachSel:"basic", coachEdit:null,
   focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0], fltState:"all",
-  viewGrade:0, viewCls:0, acctEmail:"",
+  viewGrade:0, viewCls:0, acctEmail:"", demoMode:false, supOpenDom:null, progCat:"all",
+  linkProg:"", linkSel:{}, linkStart:"2026-04-01", linkSes:8, linkStatus:"완료", linkMemo:"",
   rawOpen:false, rawTab:null, loginEmail:"", loggingIn:false, diag:null, diagRunning:false,
   bulkText:"", bulkGrade:1, bulkCls:1,
   fltDom:"all", fltCond:"all", teamOpen:false,
@@ -952,6 +973,108 @@ function calcSc(ans,gr,lang,only){
 }
 const SK="union_v5",PW_KEY="union_pw_v1";
 
+/* ══ 성과보고회 체험 모드 ═══════════════════════════════════
+   참관하시는 분들이 시스템을 직접 만져 보는 계정이다.
+
+   원칙: 실제 학생 자료에 닿지 않는다.
+     · 서버 로그인을 하지 않는다 → 토큰이 없다 → 서버가 자료를 주지 않는다
+     · USE_DB() 가 false 로 잠겨 읽기·저장·삭제·동기화가 모두 막힌다
+     · 저장소 칸도 따로 쓴다 → 체험 중 등록·삭제가 실제 명단을 건드리지 않는다
+     · 화면에 뜨는 학생은 전부 가상 인물이다 (실명·학번·개별 결과 없음)
+   메뉴를 숨기는 것과 길을 끊는 것은 다르다. 여기서는 길을 끊는다. */
+const DEMO_KEY="union_demo_v4";
+/* 체험을 시작할 때 먼저 열어 줄 학급.
+   맞춤지원·성장관찰·안정적 성장·미진단이 모두 한 명씩은 있어서
+   2~3분 안에 기능을 전부 보여 줄 수 있는 반을 골랐다. */
+const DEMO_START_G=4, DEMO_START_C=2;
+function isDemoMode(){ try{ return !!(S&&S.demoMode); }catch(e){ return false; } }
+
+// 가상 학생 48명 (1~6학년 × 2반 × 4명)
+const DEMO_SURNAME=["김","이","박","최","정","강","조","윤","장","임","한","오","서","신","권","황"];
+const DEMO_GIVEN=["서준","하윤","도윤","지우","예준","서아","시우","하은","주원","지호",
+                  "수아","지안","건우","윤서","우진","채원","민준","다은","준서","소율",
+                  "은우","유나","현우","서연"];
+const DEMO_COUNTRY=["대한민국","베트남","중국","필리핀","러시아","우즈베키스탄","몽골","대한민국","대한민국"];
+const DEMO_STYPE=["일반학생","국제결혼가정(국내출생)","국제결혼가정(중도입국)","외국인가정","일반학생"];
+
+// 같은 화면이 매번 다르게 보이면 설명하기 어렵다. 순서가 고정된 난수를 쓴다.
+function demoRnd(seed){ let x=Math.sin(seed)*10000; return x-Math.floor(x); }
+
+function demoStudents(){
+  const out=[]; let i=0;
+  for(let g=1;g<=6;g++)for(let c=1;c<=2;c++)for(let k=0;k<6;k++){
+    i++;
+    const r1=demoRnd(i*3.7), r2=demoRnd(i*8.1), r3=demoRnd(i*5.3);
+    const name=DEMO_SURNAME[i%DEMO_SURNAME.length]+DEMO_GIVEN[(i*5)%DEMO_GIVEN.length];
+    // 네 명 중 한 명은 미진단으로 남겨 '아직 안 한 학생'도 보이게 한다
+    const undone=(k===5&&g%2===0);
+    // 참관자가 보기에 '한쪽으로 쏠리지 않은 학교'로 보여야 한다.
+    // 지원 필요 8 · 관찰 필요 21 · 안정 13 · 미진단 6 이 나오도록 맞춘 값이다.
+    const base=34+Math.round(r1*46);                       // 1차 기준선
+    const weak=Math.floor(r2*SUBS.length);                 // 유독 낮은 영역 하나
+    const mk=(bumps)=>{
+      const o={};
+      SUBS.forEach((key,si)=>{
+        let v=base+Math.round(demoRnd(i*11+si)*14)+(bumps?bumps[si]:0);
+        if(si===weak)v-=18;                                // 약한 영역
+        o[key]=Math.max(0,Math.min(100,v));
+      });
+      return rollup(o);
+    };
+    // 영역마다 자란 정도가 달라야 한다. 전부 같은 폭으로 오르면
+    // 한눈에 꾸민 자료로 보이고, 어느 지원이 무엇에 닿았는지도 말할 수 없다.
+    // 한둘은 제자리이거나 살짝 내려가게 둔다 — 자기이해가 깊어지면
+    // 2차 자기평가가 오히려 낮아지기도 하기 때문이다.
+    const bumps=SUBS.map((k,si)=>{
+      const q=demoRnd(i*17+si*3.1);
+      if(si===weak)return 14+Math.round(q*16);             // 지원한 영역은 많이
+      if(q<.14)return -2-Math.round(q*12);                 // 가끔은 내려가게
+      if(q<.30)return 0;                                   // 제자리
+      return 4+Math.round(q*14);
+    });
+    const s1=mk(null), s2=mk(bumps);
+    const hist=undone?[]:[
+      {date:"2026-04-08",scores:s1,measured:SUBS.slice(),by:"학생",lang:"ko"},
+      {date:"2026-09-23",scores:s2,measured:SUBS.slice(),by:"학생",lang:"ko"}
+    ];
+    const stu={
+      id:"demo-"+g+"-"+c+"-"+k,
+      name:name, grade:g, cls:c,
+      teacher:g+"학년 "+c+"반 담임",
+      country:DEMO_COUNTRY[(i*3)%DEMO_COUNTRY.length],
+      stype:DEMO_STYPE[(i*2)%DEMO_STYPE.length],
+      at:"2026-03-04",
+      scores:undone?null:s2,
+      scoreHistory:hist,
+      logs:[], supports:[],
+      tcNote:"", teamFb:null, _demo:true
+    };
+    // 낮은 영역에는 지원을 한 건 붙여 둔다 — 진단→지원→성장 흐름이 보이도록
+    if(!undone&&r3<.72){
+      const dom=SUBS[weak];
+      const lib=(PROG_LIB[dom]||[]);
+      const pick=lib.length?lib[Math.floor(r3*lib.length)%lib.length]:null;
+      if(pick){
+        // 예정·진행중·완료가 고루 섞여야 진행 현황 화면이 살아난다
+        const stv=r2<.42?"완료":(r2<.82?"진행중":"예정");
+        stu.supports.push({id:"ds"+i,dom:dom,prog:pick.n,start:"2026-05-13",
+          sessions:6+Math.floor(r1*6),status:stv,
+          why:(r1<.55?["진단 결과에서 지원 검토","담임 관찰에서 추가 지원 필요"]:["진단 결과에서 지원 검토"]),
+          memo:"["+pick.o+"] "+(pick.d||"")});
+      }
+      stu.logs.push({id:"dl"+i,date:"2026-06-11",author:"담임교사",
+        tags:["협동활동"],memo:"모둠 활동에서 친구에게 먼저 말을 거는 모습이 늘었습니다."});
+    }
+    out.push(stu);
+  }
+  return out;
+}
+
+const loadDemo=()=>{try{const d=localStorage.getItem(DEMO_KEY);return d?JSON.parse(d):demoStudents();}catch(e){return demoStudents();}};
+const saveDemo=l=>{try{localStorage.setItem(DEMO_KEY,JSON.stringify(l));}catch(e){}};
+// 체험 자료를 처음 상태로 되돌린다 (다음 참관자를 위해)
+function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return demoStudents(); }
+
 // ── 앱 전역 상태 ──────────────────────────────────────────
 
 
@@ -959,7 +1082,7 @@ const SK="union_v5",PW_KEY="union_pw_v1";
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-10-02-01";
+const APP_VERSION = "2026-10-06-04";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1373,7 +1496,15 @@ function initSupabase(url, key){
 // 페이지 로드 시 CDN 로드 완료 후 초기화
 window.addEventListener("load", ()=>{ initSupabase(); });
 
-const USE_DB = ()=> !!(SB_URL && SB_KEY); // REST API 직접 사용, sbClient 불필요
+/* ── 서버 접속 차단 지점 ────────────────────────────────────
+   앱의 모든 서버 입출력(명단 읽기·저장·삭제·동기화)은 예외 없이
+   USE_DB() 를 먼저 확인한다. 그래서 체험 모드에서 이 한 곳만 막으면
+   서버로 나가는 길이 전부 닫힌다.
+
+   ⚠️ 체험 계정은 로그인 자체를 하지 않아 토큰이 없다. 주소를 직접
+      고치거나 뒤로가기를 눌러도 실제 학생 자료 화면으로 넘어갈 수
+      없는 이유가 이것이다. '메뉴를 숨기는 것'이 아니라 길을 끊는다. */
+const USE_DB = ()=> !isDemoMode() && !!(SB_URL && SB_KEY);
 
 // 화면 진입 시 자동으로 학교 공용 데이터 끌어오기 (30초 쿨다운)
 let _lastSync=0;
@@ -1683,47 +1814,70 @@ function defNotices(){return[];}
    ⚠️ 학생 이름·학급·가정 사정은 넣지 않는다. 이 목록은 '어떤 사업이
       있는지' 고르는 서랍이고, 누가 무슨 지원을 받았는지는 학생별
       지원 기록에 교사가 직접 남긴다. */
+/* ── 학교 운영·연계 지원 사업 목록 ─────────────────────────
+   김해내동초 2026 교육복지우선지원사업 운영 내용을 바탕으로,
+   다감수행 6개 영역에 맞춰 정리했다.
+     n = 사업명 / o = 운영·연계 기관 / d = 운영 내용
+     c = 성격 분류 — 교사가 "상담보다 수업 속 지원부터" 같은 판단을 하도록
+     x = 연계 영역 — 한 사업이 여러 역량과 닿는 경우가 많다. 주 영역 외에
+         함께 길러지는 영역을 적어 둔다 (없으면 생략)
+   ⚠️ 학생 이름·학급·가정 사정은 넣지 않는다. */
+const PROG_CATS={
+  "수업":    {lb:"수업·교육활동", c:"#4C6FE8", bg:"#EDF1FF"},
+  "한국어":  {lb:"한국어·학습",   c:"#12A47C", bg:"#E6F9F2"},
+  "상담":    {lb:"상담·정서",     c:"#E8445A", bg:"#FFEEF1"},
+  "공동체":  {lb:"관계·공동체",   c:"#F0842E", bg:"#FFF3E8"},
+  "외부연계":{lb:"외부기관 연계", c:"#8B5CF6", bg:"#F4EFFF"}
+};
 const PROG_LIB={
  "정체성 인식":[
-   {n:"신기방기 동화나라", o:"교육복지우선지원사업", d:"3학년 대상 '나만의 그림 동화책 만들기' 8회차 16시간"},
-   {n:"그림책 테라피", o:"교육복지우선지원사업", d:"4~6학년 6차시 총 12시간"},
-   {n:"꿈꾸는 아이들 꿈 디자이너 사업", o:"월드비전·구산사회복지관", d:"매월 비전원정대 활동, 진로탐색·체험활동 / 꿈지원금·방학 학습지원비·명절 지원금 / 보호자 부모교육 연 1회, 자조모임 연 4회"},
-   {n:"이주배경학생 개인상담", o:"김해시가족센터", d:"개인상담 각 10회기 진행"}
+   {n:"신기방기 동화나라", o:"교육복지우선지원사업", c:"수업", x:["문화 다양성 이해"], d:"3학년 대상 '나만의 그림 동화책 만들기' 8회차 16시간"},
+   {n:"그림책 테라피", o:"교육복지우선지원사업", c:"상담", x:["편견 인식 및 공감"], d:"4~6학년 6차시 총 12시간"},
+   {n:"꿈꾸는 아이들 꿈 디자이너 사업", o:"월드비전·구산사회복지관", c:"외부연계", x:["공존 실천 및 협력"], d:"매월 비전원정대 활동, 진로탐색·체험활동 / 꿈지원금·방학 학습지원비·명절 지원금 / 보호자 부모교육 연 1회, 자조모임 연 4회"},
+   {n:"이주배경학생 개인상담", o:"김해시가족센터", c:"상담", x:[], d:"개인상담 각 10회기 진행"}
  ],
  "문화 다양성 이해":[
-   {n:"오물딱조물딱 체험교실", o:"교육복지우선지원사업", d:"연 5회 수요일 방과후, 4~6학년 / 베이킹(마카롱·마들렌·에그타르트)·목공예·도예 체험"},
-   {n:"꿈을 키우는 체험학교", o:"교복우 초등 3교 연합", d:"4회 운영, 회당 4~6학년 / 도시농부체험교실(5·10월), 영화관람, 볼링체험, 영상미디어 체험"},
-   {n:"과학체험의 날", o:"교육과정 연계(과학정보부)", d:"1학년 풍력자동차, 2학년 무중력자동차, 3학년 큐보로봇, 4학년 드론, 5학년 자율주행자동차, 6학년 터틀봇"},
-   {n:"가족캠프(교육지원청-학교 공동사업)", o:"김해문화재단", d:"1박 2일 가족캠프"},
-   {n:"현장체험활동비 지원", o:"교육복지우선지원사업", d:"현장체험학습 차량 임차료 지원"}
+   {n:"오물딱조물딱 체험교실", o:"교육복지우선지원사업", c:"수업", x:["공존 실천 및 협력"], d:"연 5회 수요일 방과후, 4~6학년 / 베이킹(마카롱·마들렌·에그타르트)·목공예·도예 체험"},
+   {n:"꿈을 키우는 체험학교", o:"교복우 초등 3교 연합", c:"공동체", x:["공존 실천 및 협력"], d:"4회 운영, 회당 4~6학년 / 도시농부체험교실(5·10월), 영화관람, 볼링체험, 영상미디어 체험"},
+   {n:"과학체험의 날", o:"교육과정 연계(과학정보부)", c:"수업", x:[], d:"1학년 풍력자동차, 2학년 무중력자동차, 3학년 큐보로봇, 4학년 드론, 5학년 자율주행자동차, 6학년 터틀봇"},
+   {n:"가족캠프(교육지원청-학교 공동사업)", o:"김해문화재단", c:"공동체", x:["정체성 인식"], d:"1박 2일 가족캠프"},
+   {n:"현장체험활동비 지원", o:"교육복지우선지원사업", c:"수업", x:[], d:"현장체험학습 차량 임차료 지원"}
  ],
  "편견 인식 및 공감":[
-   {n:"이주배경학생 부모상담", o:"김해시가족센터", d:"가정 단위 보호자 상담"},
-   {n:"반찬 후원 및 정서지원", o:"모든민족교회", d:"정기 반찬 후원과 정서 지원 연계"},
-   {n:"드림스타트 연계", o:"김해시청", d:"주기적 가정방문 및 복지 서비스 제공"},
-   {n:"위기아동지원사업(희망장학금)", o:"굿네이버스", d:"위기 가정 아동 대상 장학금 지원"}
+   {n:"이주배경학생 부모상담", o:"김해시가족센터", c:"상담", x:["정체성 인식"], d:"가정 단위 보호자 상담"},
+   {n:"반찬 후원 및 정서지원", o:"모든민족교회", c:"외부연계", x:[], d:"정기 반찬 후원과 정서 지원 연계"},
+   {n:"드림스타트 연계", o:"김해시청", c:"외부연계", x:["평등 기반 존중 태도"], d:"주기적 가정방문 및 복지 서비스 제공"},
+   {n:"위기아동지원사업(희망장학금)", o:"굿네이버스", c:"외부연계", x:["평등 기반 존중 태도"], d:"위기 가정 아동 대상 장학금 지원"}
  ],
  "평등 기반 존중 태도":[
-   {n:"정기후원금 연계", o:"초록우산어린이재단", d:"초2~고3 대상 정기 후원금 연계"},
-   {n:"이주배경아동 학습비 지원", o:"IBK기업은행·초록우산어린이재단", d:"초5~고3 대상 매월 학원비 지원"},
-   {n:"아동 돌봄비 지원", o:"초록우산어린이재단", d:"돌봄비 지원 연계"},
-   {n:"소원성취지원사업", o:"초록우산어린이재단", d:"아동 소원 성취 지원"},
-   {n:"여성용품 지원", o:"김해시건축사협회·굿네이버스·지파운데이션", d:"교육복지대상 5~6학년 여성용품 지원"},
-   {n:"안경 지원", o:"김해보건소", d:"시력 교정 안경 지원"}
+   {n:"정기후원금 연계", o:"초록우산어린이재단", c:"외부연계", x:[], d:"초2~고3 대상 정기 후원금 연계"},
+   {n:"이주배경아동 학습비 지원", o:"IBK기업은행·초록우산어린이재단", c:"외부연계", x:["한국어"], d:"초5~고3 대상 매월 학원비 지원"},
+   {n:"아동 돌봄비 지원", o:"초록우산어린이재단", c:"외부연계", x:[], d:"돌봄비 지원 연계"},
+   {n:"소원성취지원사업", o:"초록우산어린이재단", c:"외부연계", x:["정체성 인식"], d:"아동 소원 성취 지원"},
+   {n:"여성용품 지원", o:"김해시건축사협회·굿네이버스·지파운데이션", c:"외부연계", x:[], d:"교육복지대상 5~6학년 여성용품 지원"},
+   {n:"안경 지원", o:"김해보건소", c:"외부연계", x:[], d:"시력 교정 안경 지원"}
  ],
  "문화 간 소통":[
-   {n:"상담통역사 지원(다가치 통번역)", o:"경상남도교육청·경남가족센터", d:"학생 상담 통역 지원 연 30회"},
-   {n:"이주배경아동 가정방문 학습 및 생활지원", o:"김해시가족센터", d:"가정방문 학습·생활 지원 연계"},
-   {n:"언어치료(아동발달지연 바우처)", o:"바우처 연계", d:"발달지연 아동 언어치료 바우처 연계"},
-   {n:"맞춤형 언어치료 지원", o:"교육복지우선지원사업", d:"개별 학생 맞춤 언어치료 지원"}
+   {n:"상담통역사 지원(다가치 통번역)", o:"경상남도교육청·경남가족센터", c:"한국어", x:["편견 인식 및 공감"], d:"학생 상담 통역 지원 연 30회"},
+   {n:"이주배경아동 가정방문 학습 및 생활지원", o:"김해시가족센터", c:"한국어", x:["정체성 인식"], d:"가정방문 학습·생활 지원 연계"},
+   {n:"언어치료(아동발달지연 바우처)", o:"바우처 연계", c:"한국어", x:[], d:"발달지연 아동 언어치료 바우처 연계"},
+   {n:"맞춤형 언어치료 지원", o:"교육복지우선지원사업", c:"한국어", x:[], d:"개별 학생 맞춤 언어치료 지원"}
  ],
  "공존 실천 및 협력":[
-   {n:"진로탐색교육 '창직진로캠프'", o:"교육복지우선지원사업", d:"5학년 6시간"},
-   {n:"초6 전환기캠프 '스쿨업 드림업'", o:"교육복지우선지원사업", d:"6학년 6시간"},
-   {n:"진로진학설계비 지원", o:"김해시가족센터", d:"탭댄스 동아리 운영, 유니온 동아리와 함께 참여 / 가족센터 성과공유회·학예회 공연 무대"},
-   {n:"방과 후 돌봄 연계", o:"지역아동센터", d:"누리·성바오르배움터·김해사랑·주촌·내외·성부 지역아동센터 입소 연계 및 학생 관리"}
+   {n:"진로탐색교육 '창직진로캠프'", o:"교육복지우선지원사업", c:"수업", x:["정체성 인식"], d:"5학년 6시간"},
+   {n:"초6 전환기캠프 '스쿨업 드림업'", o:"교육복지우선지원사업", c:"공동체", x:["정체성 인식"], d:"6학년 6시간"},
+   {n:"진로진학설계비 지원", o:"김해시가족센터", c:"공동체", x:["문화 다양성 이해"], d:"탭댄스 동아리 운영, 유니온 동아리와 함께 참여 / 가족센터 성과공유회·학예회 공연 무대"},
+   {n:"방과 후 돌봄 연계", o:"지역아동센터", c:"외부연계", x:[], d:"누리·성바오르배움터·김해사랑·주촌·내외·성부 지역아동센터 입소 연계 및 학생 관리"}
  ]
 };
+// 사업명으로 분류·연계 영역을 찾는다
+function progMeta(name){
+  for(const dom in PROG_LIB){
+    const hit=(PROG_LIB[dom]||[]).find(x=>x.n===name);
+    if(hit)return {dom:dom, cat:hit.c||"", link:hit.x||[], org:hit.o||""};
+  }
+  return null;
+}
 
 function defPrograms(){return[
   {name:"나를 알아가는 자기이해 프로그램",domain:"정체성 인식",desc:"자신의 경험과 배경을 긍정적으로 바라보는 자아 정체성 형성",target:T_NEED,sessions:8,color:"#4C6FE8"},
@@ -1798,8 +1952,16 @@ function migrateScales(list){
   return out;
 }
 
-const loadSt=()=>{try{const d=localStorage.getItem(SK);return migrateScales(d?JSON.parse(d):defData());}catch(e){return defData();}};
-const saveSt=l=>{try{localStorage.setItem(SK,JSON.stringify(l));}catch(e){}};
+// 체험 모드는 저장소 칸을 따로 쓴다. 참관자가 학생을 등록하거나 지워도
+// 선생님들의 실제 명단에는 아무 일도 일어나지 않는다.
+const loadSt=()=>{
+  if(isDemoMode())return loadDemo();
+  try{const d=localStorage.getItem(SK);return migrateScales(d?JSON.parse(d):defData());}catch(e){return defData();}
+};
+const saveSt=l=>{
+  if(isDemoMode()){saveDemo(l);return;}
+  try{localStorage.setItem(SK,JSON.stringify(l));}catch(e){}
+};
 const getPw=()=>localStorage.getItem(PW_KEY)||"teacher1234";
 const NK="union_notices_v2", PRK="union_programs_v1", RSK="union_resources_v2";
 function loadNotices(){try{const d=localStorage.getItem(NK);return d?JSON.parse(d):defNotices();}catch(e){return defNotices();}}
@@ -1838,7 +2000,7 @@ function hRoundTabs(s){
   o+='<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">';
   // 가장 낮은 영역 (주인공 자리)
   o+='<div style="flex:1.6;min-width:170px;padding:12px 15px;border-radius:12px;background:'+lowBg+'">';
-  o+='<div style="font-size:10px;font-weight:800;color:'+lowC+';opacity:.85">'+(lowV>=T_GOOD?"가장 낮은 영역 · 모두 양호":"먼저 살펴볼 영역")+'</div>';
+  o+='<div style="font-size:10px;font-weight:800;color:'+lowC+';opacity:.85">'+(lowV>=T_GOOD?"우선 살펴볼 영역 · 모두 양호":"우선 살펴볼 영역")+'</div>';
   o+='<div style="display:flex;align-items:baseline;gap:7px;margin-top:3px;flex-wrap:wrap">';
   o+='<span style="font-size:17px;font-weight:900;color:'+lowC+';letter-spacing:-.02em;line-height:1.2">'+hcv(lowK||"-")+'</span>';
   o+='<span style="font-size:24px;font-weight:900;color:'+lowC+';line-height:1.1">'+lowV+'</span></div>';
@@ -2013,7 +2175,10 @@ async function autoNeis(s,force){
 
   let text="", mode="auto";
   try{
-    if(S.apiKey){
+    // 체험 계정은 AI를 부르지 않는다. 참관자가 학생을 열 때마다 학교 API
+    // 비용이 나가는 것을 막고, 바깥으로 나가는 통신 자체를 없앤다.
+    // 대신 아래 자동 작성으로 같은 모양의 초안을 보여 준다.
+    if(S.apiKey && !isDemoMode()){
       // 이전 결과가 남아 있으면 실패를 성공으로 오인하므로 먼저 비운다
       S.neisText="";
       await genNeis(s);                                // AI 초안
@@ -2044,9 +2209,10 @@ function hAutoAnalysis(s){
   if(!a)return "";
   let o='<div class="card" style="border:1.5px solid #DCD7F5;background:linear-gradient(135deg,#FCFBFF,#FBF7FF)">';
   o+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:18px">🔎</span>';
-  o+='<div><div class="eyebrow">자동 분석</div>';
+  o+='<div><div class="eyebrow">진단 응답 기반 AI 참고 의견</div>';
   o+='<div style="font-size:14.5px;font-weight:800;margin-top:3px;letter-spacing:-.02em">진단 결과 해석</div></div></div>';
-  o+='<div style="font-size:11px;color:var(--m);margin:6px 0 14px;line-height:1.6">진단 점수를 바탕으로 자동으로 작성됩니다. 아래 AI 종합의견과 함께 참고하세요.</div>';
+  // AI가 '이 학생에게 문제가 있다고 판단했다'처럼 읽히면 안 된다.
+  o+='<div style="font-size:11px;color:var(--m);margin:6px 0 14px;line-height:1.6">학생이 응답한 진단 점수만을 근거로 만든 <strong>참고 의견</strong>이에요. 판단은 선생님이 하시고, 교사 관찰·지원 기록과 함께 보아 주세요.</div>';
 
   const blk=(icon,title,color,bg,html)=>'<div style="padding:13px 15px;border-radius:13px;background:'+bg+';margin-bottom:9px">'
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px"><span style="font-size:13px">'+icon+'</span>'
@@ -2096,8 +2262,13 @@ function hHiLo(s){
 
   const need=rank.filter(([,v])=>v<T_NEED);
   if(need.length){
-    o+='<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:#FFF0F3;font-size:11.5px;color:#C2334C;line-height:1.65;font-weight:600">'
-     +T_NEED+'점 미만 '+need.length+'개 영역('+need.map(([k])=>SUBM[k].s).join(", ")+')은 지원 프로그램을 함께 계획해 주세요.</div>';
+    o+='<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:#FFF0F3">';
+    o+='<div style="font-size:11.5px;color:#C2334C;line-height:1.65;font-weight:600">'
+     +need.length+'개 영역('+need.map(([k])=>SUBM[k].s).join(", ")+')이 '+T_NEED+'점 미만이에요. 지원 프로그램을 함께 계획해 주세요.</div>';
+    // 기준의 성격을 그 자리에서 밝힌다
+    o+='<div style="font-size:10px;color:#A4566B;margin-top:6px;padding-top:6px;border-top:1px solid #F5C2CE;line-height:1.6">'
+     +hcv(T_NOTE)+' · 통계적 절단점이 아니라 학교가 정한 운영 기준이에요.</div>';
+    o+='</div>';
   }
   o+=hSelfReportNote();
   o+='</div>';
@@ -2122,9 +2293,12 @@ function stuState(s){
   let lowK=null, lowV=101;
   SUBS.forEach(k=>{const v=Number(r[k])||0; if(v<lowV){lowV=v;lowK=k;}});
   if(lowK===null)return ST_NONE;
-  if(lowV<T_NEED)  return {k:"need", lb:"지원 필요", dot:"🔴", c:"#E8445A", bg:"#FFEEF1", lowK:lowK, lowV:lowV};
-  if(lowV<T_GOOD)  return {k:"watch",lb:"관찰 필요", dot:"🟡", c:"#D18A0A", bg:"#FFF6E4", lowK:lowK, lowV:lowV};
-  return               {k:"ok",   lb:"안정",     dot:"🟢", c:"#0E8F68", bg:"#E4F8F1", lowK:lowK, lowV:lowV};
+  /* ⚠️ 상태 이름은 '학생이 어떻다'가 아니라 '교사가 무엇을 할 차례인가'로 적는다.
+     다감수행 역량은 학업성취도처럼 낮음=문제학생으로 읽을 수 있는 영역이 아니다.
+     '지원 필요'는 학생에게 붙는 딱지처럼 보이므로 쓰지 않는다. */
+  if(lowV<T_NEED)  return {k:"need", lb:"맞춤지원", dot:"🔴", c:"#E8445A", bg:"#FFEEF1", lowK:lowK, lowV:lowV};
+  if(lowV<T_GOOD)  return {k:"watch",lb:"성장관찰", dot:"🟡", c:"#D18A0A", bg:"#FFF6E4", lowK:lowK, lowV:lowV};
+  return               {k:"ok",   lb:"안정적 성장", dot:"🟢", c:"#0E8F68", bg:"#E4F8F1", lowK:lowK, lowV:lowV};
 }
 // 목록·카드에 붙이는 작은 상태 뱃지
 function hStateBadge(st,small){
@@ -2214,7 +2388,7 @@ function hCaseReport(s){
     o+='<td style="padding:11px 8px;font-weight:800;color:'+SUBM[x.area].c+';line-height:1.35">'+hcv(x.area)+'</td>';
     o+='<td style="padding:11px 8px;text-align:center;font-weight:800;color:'+(x.before<60?"#E23D63":"var(--t)")+'">'+x.before+'</td>';
     o+='<td style="padding:11px 8px;text-align:center;white-space:nowrap"><span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'
-      +(x.need?"#FFF0F3;color:#C2334C":"var(--bg);color:var(--m)")+'">'+(x.need?"지원 필요":"경과 관찰")+'</span></td>';
+      +(x.need?"#FFF0F3;color:#C2334C":"var(--bg);color:var(--m)")+'">'+(x.need?T_LABEL_NEED:"경과 관찰")+'</span></td>';
     o+='<td style="padding:11px 8px;line-height:1.6">';
     if(x.sups.length){
       x.sups.forEach(p=>{
@@ -2232,14 +2406,17 @@ function hCaseReport(s){
   });
   o+='</table></div>';
 
-  // 지원한 영역이 실제로 올랐는지 한 줄로
+  /* 지원한 영역의 변화를 한 줄로.
+     ⚠️ "지원 때문에 올랐다"고 단정하지 않는다. 인과관계를 증명한 것이 아니라
+        지원·교육활동 참여 이후에 변화가 관찰된 것이다. */
   const sup=c.supported;
   if(sup.length){
     const up=sup.filter(x=>x.delta>0);
     o+='<div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:'+(up.length?"#E8FAF3":"var(--bg)")+';font-size:12px;line-height:1.75;color:'+(up.length?"#0B7355":"var(--m)")+'">';
-    if(up.length)o+='지원한 '+sup.length+'개 영역 중 <strong>'+up.length+'개</strong>에서 점수가 올랐습니다'
+    if(up.length)o+='지원·활동에 참여한 '+sup.length+'개 영역 가운데 <strong>'+up.length+'개</strong>에서 이후 점수 상승이 관찰되었습니다'
       +(up.length?(' ('+up.map(x=>SUBM[x.area].s+" +"+x.delta).join(", ")+')'):'')+'.';
-    else o+='지원한 영역에서 아직 뚜렷한 변화가 보이지 않습니다. 지원 방식이나 기간을 살펴봐 주세요.';
+    else o+='지원·활동에 참여한 영역에서 아직 뚜렷한 변화가 보이지 않습니다. 지원 방식이나 기간을 살펴봐 주세요.';
+    o+='<div style="font-size:10.5px;opacity:.8;margin-top:6px;line-height:1.65">점수 변화는 지원의 효과를 증명하는 것이 아니라, 지원과 교육활동 참여 이후에 관찰된 변화예요. 교사 관찰과 함께 살펴봐 주세요.</div>';
     o+='</div>';
   }
 
@@ -2264,15 +2441,108 @@ function hDetailTabs(s){
     if(k==="sec-raw")return !!s.scores;
     if(k==="sec-case")return !!s.scores;
     if(k==="sec-neis")return !!s.scores;
+    if(k==="sec-growth")return (s.scoreHistory||[]).length>=1;
     return true;
   };
-  const tabs=[["sec-basic","기본정보"],["sec-result","진단 결과"],["sec-raw","진단 데이터"],
-              ["sec-note","관찰 메모"],["sec-support","지원"],["sec-case","성장 사례"],
-              ["sec-team","협의"],["sec-log","기록장"],["sec-neis","종합의견"]].filter(([k])=>has(k));
+  /* 메뉴가 아홉 개 늘어서 있으면 교사가 어디부터 봐야 할지 알기 어렵다.
+     이 시스템의 일하는 순서가 곧 메뉴 순서이므로, 네 단계로 묶어서
+       STEP 1 진단 → STEP 2 지원 → STEP 3 성장 → STEP 4 기록
+     이 한눈에 보이게 한다. 단계마다 색을 달리해 구분한다. */
+  const STEPS=[
+    {n:1, t:"진단",    c:"#4C6FE8", bg:"#EDF1FF",
+     items:[["sec-basic","기본정보"],["sec-result","진단 결과"],["sec-raw","진단 데이터"]]},
+    {n:2, t:"지원",    c:"#F0842E", bg:"#FFF3E8",
+     items:[["sec-note","관찰 메모"],["sec-support","지원 프로그램"]]},
+    {n:3, t:"성장",    c:"#12A47C", bg:"#E6F9F2",
+     items:[["sec-growth","성장 추이"],["sec-case","성장 사례"]]},
+    {n:4, t:"기록",    c:"#8B5CF6", bg:"#F4EFFF",
+     items:[["sec-team","협의"],["sec-log","기록장"],["sec-neis","참고 문장"]]}
+  ];
   let o='<div class="dtabs no-print">';
-  tabs.forEach(([k,t])=>{
-    o+='<button class="dtab" data-go="'+k+'">'+t+'</button>';
+  STEPS.forEach((st,si)=>{
+    const live=st.items.filter(([k])=>has(k));
+    if(!live.length)return;
+    if(si)o+='<span class="dsep">›</span>';
+    o+='<span class="dstep" style="background:'+st.bg+';color:'+st.c+'">'
+      +'<span class="dstep-n" style="background:'+st.c+'">'+st.n+'</span>'+st.t+'</span>';
+    live.forEach(([k,t])=>{
+      o+='<button class="dtab" data-go="'+k+'" style="border-color:'+st.bg+'">'+t+'</button>';
+    });
   });
+  o+='</div>';
+  return o;
+}
+
+/* 화면을 내려가다 단계가 바뀌는 지점에 놓는 구분선.
+   탭의 STEP 표시와 같은 색을 써서 지금 어느 단계를 보고 있는지 알린다. */
+const STEP_META={
+  1:{t:"진단", c:"#4C6FE8", bg:"#EDF1FF", d:"무엇을 얼마나 할 수 있는지 살펴봅니다"},
+  2:{t:"지원", c:"#F0842E", bg:"#FFF3E8", d:"낮은 영역에 맞는 도움을 연결합니다"},
+  3:{t:"성장", c:"#12A47C", bg:"#E6F9F2", d:"지원 뒤 무엇이 달라졌는지 봅니다"},
+  4:{t:"기록", c:"#8B5CF6", bg:"#F4EFFF", d:"함께 본 내용을 남깁니다"}
+};
+function hStepBar(n){
+  const m=STEP_META[n]; if(!m)return "";
+  return '<div style="display:flex;align-items:center;gap:9px;margin:6px 0 0;padding:9px 13px;border-radius:12px;background:'+m.bg+'">'
+    +'<span style="width:20px;height:20px;border-radius:50%;background:'+m.c+';color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+n+'</span>'
+    +'<span style="font-size:12.5px;font-weight:800;color:'+m.c+'">STEP '+n+' · '+m.t+'</span>'
+    +'<span style="font-size:10.5px;color:'+m.c+';opacity:.75;font-weight:600">'+m.d+'</span></div>';
+}
+
+/* ── 회차 비교 표 ──────────────────────────────────────────
+   그래프만으로는 "몇 점에서 몇 점이 되었는지"를 읽기 어렵다.
+   첫 회차와 마지막 회차를 영역별로 나란히 적고 변화량을 보여 준다.
+
+   ⚠️ 모든 영역이 오르는 것을 곧 '성공'으로 읽지 않도록 한다.
+      자기이해가 깊어지면 2차 자기평가가 오히려 낮아질 수 있어서,
+      점수 변화·교사 관찰·활동 기록을 함께 보아야 한다고 적어 둔다. */
+function hRoundCompare(s){
+  const hist=s.scoreHistory||[];
+  if(hist.length<2)return "";
+  const A=subScores(hist[0].scores)||{}, B=subScores(hist[hist.length-1].scores)||{};
+  const mA=measuredOf(hist[0]), mB=measuredOf(hist[hist.length-1]);
+  const rows=SUBS.map(k=>{
+    const a=Number(A[k])||0, b=Number(B[k])||0;
+    return {k:k, a:a, b:b, d:b-a, measured:(mA.indexOf(k)>=0&&mB.indexOf(k)>=0)};
+  });
+  const up=rows.filter(r=>r.d>0).length, same=rows.filter(r=>r.d===0).length;
+  const n1=hist.length, lbl1=hcv(hist[0].date||"1차"), lbl2=hcv(hist[n1-1].date||(n1+"차"));
+
+  let o='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--b)">';
+  // 한 줄 요약
+  o+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:11px">';
+  o+='<span style="font-size:13.5px;font-weight:900;color:'+(up>=4?"#12A47C":up>=2?"#F0842E":"var(--t)")+';letter-spacing:-.02em">'
+    +'6개 영역 중 '+up+'개 영역 성장</span>';
+  if(same)o+='<span style="font-size:11px;color:var(--m);font-weight:600">· '+same+'개 영역 유지</span>';
+  o+='</div>';
+
+  // 표
+  o+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+  o+='<tr style="background:var(--bg)">'
+   +'<th style="padding:8px 10px;text-align:left;font-weight:700;color:var(--m);border-radius:8px 0 0 8px">영역</th>'
+   +'<th style="padding:8px 8px;font-weight:700;color:var(--m);white-space:nowrap">1차</th>'
+   +'<th style="padding:8px 8px;font-weight:700;color:var(--m);white-space:nowrap">'+n1+'차</th>'
+   +'<th style="padding:8px 10px;font-weight:700;color:var(--m);border-radius:0 8px 8px 0;white-space:nowrap">변화</th></tr>';
+  rows.forEach(r=>{
+    const col=r.d>0?"#12A47C":r.d<0?"#E8445A":"var(--m)";
+    const sign=r.d>0?"+":"";
+    o+='<tr style="border-bottom:1px solid var(--b)">';
+    o+='<td style="padding:9px 10px;font-weight:700;color:'+SUBM[r.k].c+'">'+hcv(r.k)
+      +(r.measured?"":'<span style="font-size:9px;font-weight:700;color:var(--m);margin-left:5px;padding:1px 5px;border-radius:5px;background:var(--bg)">미측정</span>')+'</td>';
+    o+='<td style="padding:9px 8px;text-align:center;color:var(--m);font-weight:600">'+r.a+'</td>';
+    o+='<td style="padding:9px 8px;text-align:center;font-weight:800;color:var(--t)">'+r.b+'</td>';
+    o+='<td style="padding:9px 10px;text-align:center;font-weight:900;color:'+col+'">'+(r.d===0?"–":sign+r.d)+'</td></tr>';
+  });
+  o+='</table></div>';
+  o+='<div style="font-size:10px;color:var(--m);margin-top:7px">'+lbl1+' → '+lbl2+'</div>';
+
+  // 해석 주의
+  o+='<div style="margin-top:11px;padding:10px 12px;border-radius:11px;background:#FFF8EC;border:1px solid #FBE3B8">';
+  o+='<div style="font-size:10.5px;color:#8A5B14;line-height:1.7">';
+  o+='<strong>점수 변화 + 교사 관찰 + 활동 기록</strong>을 함께 보아 주세요. ';
+  o+='점수가 오른 것만으로 성장했다고 보기는 어렵고, 자기이해가 깊어지면 ';
+  o+='오히려 2차 자기평가가 낮아지기도 합니다.';
+  o+='</div></div>';
   o+='</div>';
   return o;
 }
@@ -2281,7 +2551,7 @@ function hTeacherNote(s){
   let o='<div class="card" style="border:2px solid #FFE8D6;background:linear-gradient(135deg,#FFFBF7,#FFF7FB)">';
   o+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:5px"><span style="font-size:20px">👀</span>';
   o+='<div><div class="eyebrow">관찰</div><div style="font-size:14px;font-weight:800;margin-top:3px;letter-spacing:-.02em">담임 관찰 메모</div>';
-  o+='<div style="font-size:11.5px;color:var(--m);margin-top:4px">문항으로 잡히지 않는 부분. AI 종합의견에 함께 반영됩니다.</div></div></div>';
+  o+='<div style="font-size:11.5px;color:var(--m);margin-top:4px">문항으로 잡히지 않는 부분. 참고 문장 초안에 함께 반영됩니다.</div></div></div>';
   o+='<textarea id="tc-note" rows="4" placeholder="예) 책 읽기를 좋아하고 혼자 있는 시간을 즐김. 자기 의견을 주장하기보다 친구 말을 들어주는 편이라 착하다는 평을 듣지만, 수업에 흥미가 낮아 스스로 시작하는 힘이 약함." style="width:100%;padding:12px 14px;border-radius:13px;border:1.5px solid #FFE0C7;background:#fff;font-size:13px;color:var(--t);outline:none;resize:vertical;line-height:1.75;font-family:inherit;margin-top:9px">'+hcv(s.tcNote||"")+'</textarea>';
   o+='<div style="display:flex;gap:7px;margin-top:9px;align-items:center">';
   o+='<span id="tc-note-meta" style="font-size:11px;color:var(--m);flex:1">'+(s.tcNoteAt?("마지막 저장 "+hcv(s.tcNoteAt)):"아직 저장된 메모가 없어요")+'</span>';
@@ -2429,7 +2699,19 @@ function hCaseCandidates(list){
   let o='<div class="card" style="margin-top:16px">';
   o+='<div class="eyebrow">보고서 준비</div>';
   o+='<div style="font-size:14.5px;font-weight:800;margin-top:3px;letter-spacing:-.02em">사례로 쓸 만한 학생</div>';
-  o+='<div style="font-size:11.5px;color:var(--m);margin-top:5px;margin-bottom:13px;line-height:1.7">2회 이상 진단하고 지원 기록이 있는 학생 중, 지원한 영역이 실제로 오른 순서예요.</div>';
+  o+='<div style="font-size:11.5px;color:var(--m);margin-top:5px;margin-bottom:13px;line-height:1.7">2회 이상 진단하고 지원·활동 기록이 있는 학생 중, 해당 영역에서 변화가 관찰된 순서예요. <strong>5~8명만 집중해서</strong> 정리해 두면 보고서에 충분합니다.</div>';
+  /* 보고서에 쓸 표현을 여기에 적어 둔다. 1년차에는 진단과 지원이 순서대로
+     일어나지 않았으므로, 그 사실을 감추는 문장을 쓰면 나중에 설명이 꼬인다. */
+  o+='<div style="margin-bottom:13px;padding:11px 13px;border-radius:12px;background:var(--bg);border:1px dashed var(--b)">';
+  o+='<div style="font-size:10.5px;font-weight:800;color:var(--m);margin-bottom:6px">보고서에 쓸 때</div>';
+  o+='<div style="display:flex;gap:7px;margin-bottom:6px"><span style="color:#C2334C;font-weight:900;flex-shrink:0">✕</span>'
+    +'<span style="font-size:11px;color:var(--m);line-height:1.7;text-decoration:line-through;opacity:.7">1차 진단 결과를 바탕으로 ○○학생에게 맞춤지원을 실시하였다.</span></div>';
+  o+='<div style="display:flex;gap:7px"><span style="color:#0E8F68;font-weight:900;flex-shrink:0">○</span>'
+    +'<span style="font-size:11px;color:var(--t);line-height:1.7;font-weight:600">1차 진단 결과와 기존 교육활동 참여 이력을 종합하여 학생별 지원 과정을 재정리하고, 통합성장시스템에 연계 기록하였다.</span></div>';
+  o+='<div style="font-size:10px;color:var(--m);margin-top:8px;padding-top:7px;border-top:1px solid var(--b);line-height:1.7">'
+    +'1년차에는 진단과 지원 프로그램이 완전히 자동 연계되기보다, 학교에서 이미 운영 중인 지원 활동을 진단 결과와 연결하여 기록하는 방식으로 체계를 정착시켰습니다. '
+    +'2년차에는 진단 결과를 바탕으로 지원을 보다 선제적으로 연결하는 방향으로 고도화할 수 있습니다.</div>';
+  o+='</div>';
 
   if(!cand.length){
     o+='<div style="padding:14px;border-radius:12px;background:var(--bg);font-size:12px;color:var(--m);line-height:1.8">';
@@ -2468,7 +2750,7 @@ function hRosterFilter(){
   o+='<select id="flt-dom" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:12.5px;color:var(--t);outline:none;font-family:inherit;cursor:pointer"><option value="all"'+(d==="all"?" selected":"")+'>영역 전체</option>'
    +SUBS.map(x=>'<option value="'+hcv(x)+'"'+(d===x?" selected":"")+'>'+hcv(x)+'</option>').join("")+'</select>';
   o+='<select id="flt-cond" style="padding:8px 12px;border-radius:9px;border:1.5px solid var(--b);background:var(--bg);font-size:12.5px;color:var(--t);outline:none;font-family:inherit;cursor:pointer">'
-   +[["all","점수 조건 없음"],["lt60","🔴 "+T_NEED+"점 미만 (지원 필요)"],["60to79","🟡 "+T_NEED+"~"+(T_GOOD-1)+"점 (관찰 필요)"],["gte80","🟢 "+T_GOOD+"점 이상 (안정)"],["none","⚪ 미진단"]]
+   +[["all","점수 조건 없음"],["lt60","🔴 "+T_NEED+"점 미만 ("+T_LABEL_NEED+")"],["60to79","🟡 "+T_NEED+"~"+(T_GOOD-1)+"점 (성장관찰)"],["gte80","🟢 "+T_GOOD+"점 이상 (안정적 성장)"],["none","⚪ 미진단"]]
     .map(([v,l])=>'<option value="'+v+'"'+(c===v?" selected":"")+'>'+l+'</option>').join("")+'</select>';
   o+='<button id="btn-flt-reset" style="padding:8px 14px;border-radius:9px;border:1.5px solid var(--b);background:var(--s);color:var(--m);font-size:12px;font-weight:700;cursor:pointer">초기화</button>';
   o+='</div></div>';return o;
@@ -2582,6 +2864,18 @@ function hSupportPanel(s,progs){
     o+='<div style="flex:1"><div style="font-size:11.5px;font-weight:700;margin-bottom:6px">상태</div><select id="sup-status" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none;font-family:inherit;cursor:pointer">'+SUP_ST.map(x=>'<option value="'+x+'"'+(x==="진행중"?" selected":"")+'>'+x+'</option>').join("")+'</select></div></div>';
     o+='<div style="font-size:11.5px;font-weight:700;margin-bottom:6px">운영 내용 / 담당</div>';
     o+='<input id="sup-memo" placeholder="예) 주 1회 방과후 소그룹, 한국어학급 김○○ 교사" style="width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--b);font-size:13px;background:#fff;color:var(--t);outline:none;margin-bottom:12px"/>';
+    /* ── 지원 근거 ────────────────────────────────────────
+       진단 점수만 보고 일률적으로 배정한 것이 아님을 기록에 남긴다.
+       나중에 연구보고서에 "자기진단·교사관찰·협의 결과를 종합하여
+       맞춤지원을 실시하였다"고 쓸 수 있는 근거가 여기서 만들어진다. */
+    o+='<div style="font-size:11.5px;font-weight:700;margin-bottom:6px">지원을 결정한 근거 <span style="font-weight:600;color:var(--m)">(해당되는 것 모두)</span></div>';
+    o+='<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">';
+    SUP_WHY.forEach((w,wi)=>{
+      o+='<label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:7px 10px;border-radius:9px;background:#fff;border:1px solid var(--b)">'
+        +'<input type="checkbox" class="sup-why" value="'+hcv(w)+'"'+(wi<1?" checked":"")+' style="width:15px;height:15px;accent-color:var(--p);cursor:pointer"/>'
+        +'<span style="font-size:12px;color:var(--t)">'+hcv(w)+'</span></label>';
+    });
+    o+='</div>';
     o+='<button id="btn-sup-save" style="width:100%;padding:11px 0;border-radius:11px;border:none;background:var(--p);color:#fff;font-size:13px;font-weight:800;cursor:pointer">\uD83D\uDCBE 지원 내역 저장</button>';
     o+='</div>';
   }
@@ -2597,7 +2891,7 @@ function hSupportPanel(s,progs){
     o+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:'+(list.length?"10px":"0")+'">';
     o+='<span style="font-size:12.5px;font-weight:800;color:'+SUBM[k].c+'">'+k+'</span>';
     if(sc!==null)o+='<span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'+SUBM[k].bg+';color:'+SUBM[k].c+'">'+sc+'점</span>';
-    if(need)o+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:#FFF0F3;color:#E8445A">지원 필요</span>';
+    if(need)o+='<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:7px;background:#FFF0F3;color:#E8445A">'+T_LABEL_NEED+'</span>';
     o+='<span style="margin-left:auto;font-size:11px;font-weight:700;color:'+(list.length?"var(--t)":"var(--m)")+'">'+list.length+'건</span></div>';
     if(!list.length){
       o+='<div style="font-size:11.5px;color:var(--m);padding:9px 0 3px">'+(need?("⚠️ "+T_NEED+"점 미만이지만 아직 지원 기록이 없어요."):"지원 기록이 없어요.")+'</div>';
@@ -2606,7 +2900,13 @@ function hSupportPanel(s,progs){
         o+='<div style="display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border-radius:10px;background:var(--bg);margin-bottom:6px">';
         o+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700">'+hcv(x.prog)+'</span>';
         o+='<span style="font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:'+(SUP_ST_C[x.status]||"#8A8FA3")+'1F;color:'+(SUP_ST_C[x.status]||"#8A8FA3")+'">'+hcv(x.status)+'</span></div>';
-        o+='<div style="font-size:10.5px;color:var(--m);margin-top:4px">'+hcv(x.start)+' 시작 · '+(x.sessions||0)+'회기'+(x.memo?' · '+hcv(x.memo):"")+'</div></div>';
+        o+='<div style="font-size:10.5px;color:var(--m);margin-top:4px">'+hcv(x.start)+' 시작 · '+(x.sessions||0)+'회기'+(x.memo?' · '+hcv(x.memo):"")+'</div>';
+        if(x.why&&x.why.length){
+          o+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">';
+          x.why.forEach(w=>{o+='<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--pl);color:var(--p)">'+hcv(w)+'</span>';});
+          o+='</div>';
+        }
+        o+='</div>';
         o+='<button class="supdel" data-sup="'+x.id+'" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer;flex-shrink:0">삭제</button></div>';
       });
     }
@@ -2665,6 +2965,42 @@ function hDiagSummary(s){
   return o;
 }
 
+/* ── 1차·2차를 한 장에 겹쳐 보는 레이더 ────────────────────
+   선이 바깥으로 밀려난 영역이 자란 영역이다. 성과보고회에서
+   "무엇이 달라졌는가"를 말없이 보여 주는 그림이다. */
+function hRadarPair(scA,scB,sz){
+  sz=sz||230;
+  const A=subScores(scA)||{}, B=subScores(scB)||{};
+  const cx=sz/2, cy=sz/2, R=sz*0.33, n=6;
+  const ang=Array.from({length:n},(_,k)=>(k*60-90)*Math.PI/180);
+  const gp=(ratio,k)=>[cx+Math.cos(ang[k])*R*ratio, cy+Math.sin(ang[k])*R*ratio];
+  const poly=o=>SUBS.map((k,i)=>gp(Math.max((Number(o[k])||0)/100,0.04),i).map(v=>v.toFixed(1)).join(",")).join(" ");
+
+  let g='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'" style="overflow:visible;display:block" role="img" aria-label="1차와 최근 진단 결과 비교">';
+  const RN=T_NEED/100, RG=T_GOOD/100;
+  [0.2,0.4,RN,RG,1.0].forEach(ratio=>{
+    const pts=Array.from({length:n},(_,k)=>gp(ratio,k));
+    const on=(ratio===RN||ratio===RG);
+    g+='<polygon points="'+pts.map(p=>p.map(v=>v.toFixed(1)).join(",")).join(" ")+'" fill="none" stroke="'
+      +(ratio===RN?"#F0842E":ratio===RG?"#12A47C":"var(--b)")+'" stroke-width="'+(on?1.1:.6)+'"'
+      +(on?' stroke-dasharray="4,3"':'')+'/>';
+  });
+  Array.from({length:n},(_,k)=>{const [x,y]=gp(1,k);
+    g+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="var(--b)" stroke-width=".6"/>';});
+  // 1차는 옅은 회색, 최근은 진한 보라
+  g+='<polygon points="'+poly(A)+'" fill="rgba(138,143,163,.13)" stroke="#8A8FA3" stroke-width="1.6" stroke-dasharray="5,3" stroke-linejoin="round"/>';
+  g+='<polygon points="'+poly(B)+'" fill="rgba(91,78,232,.17)" stroke="#5B4EE8" stroke-width="2.4" stroke-linejoin="round"/>';
+  SUBS.forEach((k,i)=>{
+    const [x,y]=gp(Math.max((Number(B[k])||0)/100,0.04),i);
+    g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.2" fill="#5B4EE8" stroke="#fff" stroke-width="1.4"/>';
+    const [lx,ly]=gp(1.3,i);
+    const anc=Math.abs(lx-cx)<6?"middle":(lx>cx?"start":"end");
+    g+='<text x="'+lx.toFixed(1)+'" y="'+(ly+3).toFixed(1)+'" text-anchor="'+anc+'" font-size="9" font-weight="700" fill="'+SUBM[k].c+'" font-family="inherit">'+hcv(SUBM[k].s)+'</text>';
+  });
+  g+='</svg>';
+  return g;
+}
+
 function hRadar(sc,sz,showScore){
   sz=sz||200; if(!sc)return"";
   const r=subScores(sc);
@@ -2716,10 +3052,25 @@ function hBars(sc){
 }
 function hTopbar(title,back,extra){back=back===undefined?true:back;let h='<div style="background:rgba(255,255,255,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--b);height:56px;padding:0 20px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10">';if(back)h+='<button id="bk" aria-label="뒤로" style="background:none;border:none;cursor:pointer;color:var(--m);font-size:19px;padding:4px 10px 4px 0;line-height:1">←</button>';h+='<span style="font-size:15.5px;font-weight:800;flex:1;letter-spacing:-.02em">'+title+'</span>';if(extra)h+=extra;h+='</div>';return h;}
 function hSidebar(menuId,bg,accent,who,items){bg=bg||"var(--t)";accent=accent||"var(--p)";let h='<div class="sidebar" style="background:'+bg+'">';h+='<div style="padding:22px 16px 16px">'+hLogo(21,true)+'<div style="font-size:11px;color:#9FA6C0;margin-top:6px;line-height:1.5">'+who+'</div>'
-+(isAuthed()?'<div style="font-size:10px;color:#6B6890;margin-top:4px;word-break:break-all">'+hcv(SB_EMAIL)+'</div>':'')+'<div style="font-size:10px;color:#6B6890;margin-top:3px">'+(S.schoolYear||'2025')+'년도</div></div>';h+='<div style="height:1px;background:#ffffff18;margin:0 16px 8px"></div><nav style="flex:1;padding:4px 0">';items.forEach(item=>{const on=menuId===item.id;h+='<button class="nav-btn'+(on?" on":"")+'" data-menu="'+item.id+'" style="'+(on?"background:"+accent+";color:#fff;":"")+'">';h+='<span style="font-size:16px;width:20px;text-align:center;flex-shrink:0">'+item.icon+'</span><span>'+item.label+'</span></button>';});h+='</nav>'+((menuId!==undefined&&daysSinceBackup()>=7&&(S.students||[]).length>0)
++(isAuthed()?'<div style="font-size:10px;color:#6B6890;margin-top:4px;word-break:break-all">'+hcv(SB_EMAIL)+'</div>':'')+'<div style="font-size:10px;color:#6B6890;margin-top:3px">'+(S.schoolYear||'2025')+'년도</div></div>';h+='<div style="height:1px;background:#ffffff18;margin:0 16px 8px"></div><nav style="flex:1;padding:4px 0">';items.forEach(item=>{const on=menuId===item.id;
+  h+='<button class="nav-btn'+(on?" on":"")+'" data-menu="'+item.id+'" style="'+(on?"background:"+accent+";color:#fff;":"")+'align-items:flex-start">';
+  h+='<span style="font-size:16px;width:20px;text-align:center;flex-shrink:0;line-height:1.35">'+item.icon+'</span>';
+  h+='<span style="flex:1;min-width:0;text-align:left"><span style="display:block;line-height:1.35">'+item.label+'</span>';
+  // 메뉴마다 무엇을 보는 곳인지 한 줄로 적어, 역할이 겹쳐 보이지 않게 한다
+  if(item.sub)h+='<span style="display:block;font-size:9.5px;font-weight:600;margin-top:2px;line-height:1.4;opacity:'+(on?".8":".6")+';color:'+(on?"#fff":"#9FA6C0")+'">'+item.sub+'</span>';
+  h+='</span></button>';});h+='</nav>'+((menuId!==undefined&&!isDemoMode()&&daysSinceBackup()>=7&&(S.students||[]).length>0)
   ?'<div id="backup-nudge" style="margin:10px 12px;padding:9px 11px;border-radius:11px;background:#FFF6E5;border:1.5px solid #F5D48A;cursor:pointer"><div style="font-size:11px;font-weight:800;color:#B8791A">💾 백업한 지 오래됐어요</div><div style="font-size:10px;color:#B8791A;margin-top:3px">눌러서 내려받기</div></div>'
   :'')+hSyncBadge()+'<div style="padding:12px 16px;border-top:1px solid #ffffff18"><button id="btn-logout" style="width:100%;padding:9px 0;border-radius:9px;background:#ffffff18;color:#C8C6E8;border:none;font-size:12px;font-weight:600;cursor:pointer">로그아웃</button></div></div>';return h;}
-function hLayout(sidebar,content){return'<div class="layout">'+sidebar+'<div class="main">'+content+'</div></div>';}
+function hLayout(sidebar,content){
+  // 체험 중에는 화면 맨 위에 그 사실을 적어 둔다.
+  // 참관자가 지금 보는 것이 실제 학생 자료가 아님을 계속 알 수 있어야 한다.
+  const band=isDemoMode()
+    ? '<div style="background:linear-gradient(135deg,#0E9BB8,#17B589);color:#fff;padding:7px 16px;display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;letter-spacing:-.01em">'
+      +'<span style="font-size:13px">🧭</span>'
+      +'<span>체험 계정 · 화면의 학생은 모두 <strong>가상 인물</strong>입니다. 실제 학생 자료는 열리지 않습니다.</span></div>'
+    : "";
+  return'<div class="layout">'+sidebar+'<div class="main">'+band+content+'</div></div>';
+}
 function hGradeCls(selG,selC,pfx){let h='<div><label style="display:block;font-size:12px;font-weight:600;color:var(--m);margin-bottom:7px">학년</label><div style="display:flex;gap:6px">';GRADES.forEach(g=>{const on=selG===g;h+='<button class="'+pfx+'gb" data-g="'+g+'" style="flex:1;padding:10px 0;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+g+'</button>';});h+='</div></div><div><label style="display:block;font-size:12px;font-weight:600;color:var(--m);margin-bottom:7px">반</label><div style="display:flex;gap:8px">';CLASSES.forEach(c=>{const on=selC===c;h+='<button class="'+pfx+'cb" data-c="'+c+'" style="flex:1;padding:12px 0;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+(c)+'반</button>';});h+='</div></div>';return h;}
 
 // ── 비교 차트: 우리 반 vs 학교 평균 ─────────────────────
@@ -2916,10 +3267,10 @@ function hFreq(list,title){
   // 지원 필요 요약
   const ns={};DS.forEach(d=>{const s2=done.filter(s=>s.scores[d]<T_NEED);if(s2.length)ns[d]=s2.map(s=>s.name);});
   if(Object.keys(ns).length===0){
-    h+='<div style="margin-top:12px;padding:10px 14px;border-radius:10px;background:#E3FAF4;font-size:12px;color:#085041;font-weight:600">🌟 모든 영역 '+T_NEED+'점 이상! 집중 지원이 필요한 학생이 없어요.</div>';
+    h+='<div style="margin-top:12px;padding:10px 14px;border-radius:10px;background:#E3FAF4;font-size:12px;color:#085041;font-weight:600">🌟 모든 영역 '+T_NEED+'점 이상! 맞춤지원 검토가 필요한 학생이 없어요.</div>';
   } else {
     h+='<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:#FFF8F0;border:1px solid #F5A62340">';
-    h+='<div style="font-size:11px;font-weight:700;color:#BA7517;margin-bottom:8px">⚠ '+T_NEED+'점 미만 · 집중 지원 필요 학생</div>';
+    h+='<div style="font-size:11px;font-weight:700;color:#BA7517;margin-bottom:8px">⚠ '+T_NOTE+'</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
     Object.entries(ns).forEach(([d,names])=>{
       h+='<div style="background:var(--s);border-radius:8px;padding:6px 12px;border:1px solid var(--b)">';
@@ -3216,10 +3567,15 @@ function pgLogin(){
     if(notices.length>1)h+='<div style="text-align:center;margin-bottom:12px;font-size:11px;color:var(--m)">공지 '+(notices.length-1)+'건 더 있음</div>';
   }
 
-  if(USE_DB()){
+  if(isDemoMode()){
+    // 참관자가 보는 화면이다. '학생 데이터에 연결돼 있다'고 읽히면 안 된다.
     h+='<div style="display:flex;align-items:center;gap:7px;padding:9px 12px;border-radius:11px;background:#E3FAF4;margin-bottom:14px">';
     h+='<span style="width:6px;height:6px;border-radius:50%;background:#12A47C;flex-shrink:0"></span>';
-    h+='<span style="font-size:11.5px;font-weight:700;color:#12A47C">학교 공용 데이터에 연결됨'+(usingSchoolDB()?"":" (이 기기 설정)")+'</span></div>';
+    h+='<span style="font-size:11.5px;font-weight:700;color:#12A47C">체험용 데이터에 연결됨</span></div>';
+  }else if(USE_DB()){
+    h+='<div style="display:flex;align-items:center;gap:7px;padding:9px 12px;border-radius:11px;background:#E3FAF4;margin-bottom:14px">';
+    h+='<span style="width:6px;height:6px;border-radius:50%;background:#12A47C;flex-shrink:0"></span>';
+    h+='<span style="font-size:11.5px;font-weight:700;color:#12A47C">학교 데이터에 연결됨'+(usingSchoolDB()?"":" (이 기기 설정)")+'</span></div>';
   }else{
     h+='<div style="padding:11px 13px;border-radius:11px;background:#FFF6E5;margin-bottom:14px">';
     h+='<div style="font-size:11.5px;font-weight:800;color:#B8791A">⚠️ 이 기기에만 저장됩니다</div>';
@@ -3227,10 +3583,15 @@ function pgLogin(){
   }
   h+='<div class="eyebrow" style="margin-bottom:12px">입장 방식</div>';
 
+  /* 입장 카드는 이 시스템이 무엇을 하는 곳인지 가장 먼저 말해 주는 자리다.
+     '학생 관리·기록'은 행정 시스템처럼 읽히고, 'AI 종합의견'은 AI가
+     주기능인 것처럼 보인다. 실제 흐름은
+       다감수행 역량을 진단하고 → 결과를 살펴보고 → 필요한 지원을 하고 → 성장을 기록한다
+     이므로 문구도 그 순서를 따른다. */
   const roles=[
     {id:"btn-student", ic:"🎒", c:"#F2568E", t:"학생으로 입장", d:"진단 설문에 참여합니다"},
-    {id:"btn-teacher", ic:"📋", c:"#5B4EE8", t:"교사로 입장",   d:"학생 관리 · 기록 · AI 종합의견"},
-    {id:"btn-external",ic:"🏢", c:"#17B589", t:"외부기관으로 입장", d:"연계 활동 기록"}
+    {id:"btn-teacher", ic:"📋", c:"#5B4EE8", t:"교사로 입장",   d:"진단 결과 · 맞춤지원 · 성장기록"},
+    {id:"btn-demo",    ic:"🧭", c:"#17B589", t:"체험 계정으로 입장", d:"UNION+ 통합성장시스템을 체험합니다"}
   ];
   roles.forEach(r=>{
     h+='<button id="'+r.id+'" class="role-btn">';
@@ -3360,6 +3721,11 @@ h+='<button id="btn-ext-go" class="btn-g" style="font-size:15px;box-shadow:0 4px
 
 // ── 교사 사이드바 & 페이지들 ────────────────────────────
 function hSyncBadge(){
+  // 체험 모드는 서버에 연결하지 않는 것이 정상 상태다. 경고처럼 보이면 안 되고,
+  // DB 설정으로 들어가는 길도 열어 두지 않는다.
+  if(isDemoMode())return '<div style="margin:10px 12px;padding:9px 11px;border-radius:11px;background:#E3FAF4;border:1.5px solid #8FE3CC">'
+   +'<div style="font-size:11px;font-weight:800;color:#12A47C">🧭 체험용 데이터에 연결됨</div>'
+   +'<div style="font-size:10px;color:#12A47C;margin-top:3px;line-height:1.5">실제 학생 자료와 분리된 가상 자료예요.</div></div>';
   if(!USE_DB())return '<div id="sync-badge" style="margin:10px 12px;padding:9px 11px;border-radius:11px;background:#FFF6E5;border:1.5px solid #F5D48A;cursor:pointer"><div style="font-size:11px;font-weight:800;color:#B8791A">⚠️ 이 기기에만 저장 중</div><div style="font-size:10px;color:#B8791A;margin-top:3px;line-height:1.5">학교 전체 통계를 쓰려면 DB 연결이 필요해요. 눌러서 설정 →</div></div>';
   const okk=S._syncOk!==false;
   return '<div id="sync-badge" style="margin:10px 12px;padding:9px 11px;border-radius:11px;background:'+(okk?"#E3FAF4":"#FFF0F3")+';border:1.5px solid '+(okk?"#8FE3CC":"#F5C2CE")+';cursor:pointer">'
@@ -3369,7 +3735,22 @@ function hSyncBadge(){
       :hcv(S._syncErr||"눌러서 다시 시도"))+'</div></div>';
 }
 
-function tcSidebar(){const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;const who=tcIsSpecial?((isNamedDemo()?"참관용 계정":"전담교사")+" · "+scopeLabel()):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:""));return hSidebar(menu,"var(--t)","var(--p)",who,[{id:"survey",icon:"🌱",label:"학생 성장관리"},{id:"classView",icon:"📊",label:"학급 현황"},{id:"schoolView",icon:"🏫",label:"학교 현황"},{id:"support",icon:"📅",label:"지원 프로그램"},{id:"notice",icon:"📢",label:"공지사항"},{id:"resource",icon:"📁",label:"자료실"},{id:"admin",icon:"🔐",label:"관리자"}]);}
+function tcSidebar(){
+  const{menu,tcName,tcGrade,tcCls,tcIsSpecial}=S;
+  const who=isDemoMode()?("체험 계정 · "+scopeLabel())
+    :(tcIsSpecial?("전담교사 · "+scopeLabel()):(tcGrade+"학년 "+tcCls+"반"+(tcName?" · "+tcName:"")));
+  /* 개인 → 학급 → 학교. 위에서 아래로 보는 범위가 넓어진다.
+     설명 한 줄씩을 달아 두어야 나중에 기능이 겹쳐 보이지 않는다. */
+  const items=[{id:"survey",   icon:"🌱",label:"학생 성장관리", sub:"한 아이를 본다"},
+               {id:"classView",icon:"📊",label:"학급 현황",    sub:"우리 반을 본다"},
+               {id:"schoolView",icon:"🏫",label:"학교 현황",   sub:"학교의 변화를 본다"},
+               {id:"support",  icon:"📅",label:"맞춤지원",     sub:"진단을 실제 교육활동으로"},
+               {id:"notice",   icon:"📢",label:"공지사항",     sub:"운영 안내"},
+               {id:"resource", icon:"📁",label:"자료실",       sub:"활동지·연수·운영자료"}];
+  // 관리자 화면에는 공용 DB 주소와 비밀번호 설정이 있다. 체험 계정에는 열지 않는다.
+  if(!isDemoMode())items.push({id:"admin",icon:"🔐",label:"관리자",sub:"계정·권한·설정"});
+  return hSidebar(menu,"var(--t)","var(--p)",who,items);
+}
 
 function pgBulkAdd(){
   const g=S.tcIsSpecial?(S.bulkGrade||(isDemoAcct()&&Number(S.viewGrade))||1):S.tcGrade;
@@ -3443,6 +3824,9 @@ function pgSurveyList(){
   let body=hTopbar("학생 성장관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
   body+='<div style="padding:16px 20px;max-width:900px">';
   body+=hScopeBar();
+  body+='<div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 13px;border-radius:12px;background:var(--pl)">'
+    +'<span style="font-size:14px">🌱</span>'
+    +'<span style="font-size:11.5px;color:var(--p);font-weight:700;line-height:1.5">학생 중심 탐색 — <strong>지금 어떤 학생을 먼저 살펴볼 것인가?</strong></span></div>';
 
   // ── 상태별 요약 + 빠른 필터 ──
   // 목록을 열자마자 '누구를 먼저 봐야 하는지'가 보이게 한다.
@@ -3450,9 +3834,9 @@ function pgSurveyList(){
   my.forEach(s=>{cnt[stuState(s).k]++;});
   const cur=S.fltState||"all";
   const tabs=[["all","전체",my.length,"var(--p)","var(--pl)","👥"],
-              ["need","지원 필요",cnt.need,"#E8445A","#FFEEF1","🔴"],
-              ["watch","관찰 필요",cnt.watch,"#D18A0A","#FFF6E4","🟡"],
-              ["ok","안정",cnt.ok,"#0E8F68","#E4F8F1","🟢"],
+              ["need","맞춤지원",cnt.need,"#E8445A","#FFEEF1","🔴"],
+              ["watch","성장관찰",cnt.watch,"#D18A0A","#FFF6E4","🟡"],
+              ["ok","안정적 성장",cnt.ok,"#0E8F68","#E4F8F1","🟢"],
               ["none","미진단",cnt.none,"#8A8FA3","#F2F2F6","⚪"]];
   body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-bottom:14px">';
   tabs.forEach(([k,lb,v,c,bg,dot])=>{
@@ -3508,9 +3892,38 @@ function pgSurveyList(){
             +'<span style="font-size:9.5px;font-weight:'+(weak?800:600)+';color:'+(weak?"#E8445A":"var(--m)")+';width:20px;text-align:right">'+v+'</span></div>';
         });
         body+='</div></div>';
-        // 가장 낮은 영역을 한 줄로 못 박아 준다
+        // 왜 이 세 개만 보이는지 밝혀 둔다. 처음 보는 선생님은
+        // "왜 학생마다 다른 영역이 뜨지?" 하고 멈추게 된다.
+        body+='<div style="font-size:9px;color:var(--m);margin-top:3px;line-height:1.5">※ 성장 지원이 필요한 3개 영역을 우선 표시합니다</div>';
+        // 우선 살펴볼 영역
         body+='<div style="margin-top:9px;padding:7px 10px;border-radius:9px;background:'+st.bg+';font-size:10.5px;color:'+st.c+';font-weight:700;line-height:1.5">'
-          +(st.k==="ok"?"모든 영역 "+T_GOOD+"점 이상":"가장 낮은 영역 · "+hcv(st.lowK)+" "+st.lowV)+'</div>';
+          +(st.k==="ok"?("모든 영역 "+T_GOOD+"점 이상"):("우선 살펴볼 영역 · "+hcv(st.lowK)+" "+st.lowV))+'</div>';
+
+        /* ── 회차가 쌓였으면 '변화'를 카드에서 바로 보여 준다 ──
+           이게 없으면 이 화면은 '설문 결과로 학생을 분류해 주는 프로그램'으로
+           읽힌다. 진단 → 지원 → 재진단 → 성장 확인이 이 시스템의 본체이므로,
+           학생 목록에서부터 달라진 점이 보여야 한다. */
+        const gh=s.scoreHistory||[];
+        if(gh.length>=2){
+          const A=subScores(gh[0].scores)||{}, B=subScores(gh[gh.length-1].scores)||{};
+          const tA=totSc(gh[0].scores), tB=totSc(gh[gh.length-1].scores), dT=tB-tA;
+          // 가장 많이 자란 영역 하나를 함께 적는다
+          let bk=null, bd=-999;
+          SUBS.forEach(k=>{const d=(Number(B[k])||0)-(Number(A[k])||0); if(d>bd){bd=d;bk=k;}});
+          const col=dT>0?"#0E8F68":dT<0?"#C2334C":"var(--m)";
+          const bgc=dT>0?"#E4F8F1":dT<0?"#FFF0F3":"var(--bg)";
+          body+='<div style="margin-top:7px;padding:8px 10px;border-radius:9px;background:'+bgc+'">';
+          body+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+          body+='<span style="font-size:9.5px;font-weight:800;color:'+col+';opacity:.8">'+gh.length+'회 진단</span>';
+          body+='<span style="font-size:11px;font-weight:700;color:var(--m)">'+tA+'</span>';
+          body+='<span style="font-size:10px;color:var(--m)">→</span>';
+          body+='<span style="font-size:13px;font-weight:900;color:'+col+';line-height:1">'+tB+'</span>';
+          if(dT!==0)body+='<span style="font-size:11px;font-weight:900;color:'+col+'">'+(dT>0?"▲":"▼")+Math.abs(dT)+'</span>';
+          body+='</div>';
+          if(bk&&bd>0)body+='<div style="font-size:9.5px;color:'+SUBM[bk].c+';font-weight:700;margin-top:4px">'
+            +hcv(bk)+' '+(Number(A[bk])||0)+' → '+(Number(B[bk])||0)+' <span style="font-weight:900">▲'+bd+'</span></div>';
+          body+='</div>';
+        }
       } else {
         body+='<div style="height:64px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:11.5px;color:var(--m)">진단 미실시</div>';
       }
@@ -3536,6 +3949,9 @@ function pgClassView(){
             {lb:"미진단",v:my.filter(s=>!s.scores).length,c:"#F5A623"}];
   body+='<div style="padding:16px 20px;max-width:900px">';
   body+=hScopeBar();
+  body+='<div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 13px;border-radius:12px;background:#E6F2FF">'
+    +'<span style="font-size:14px">📊</span>'
+    +'<span style="font-size:11.5px;color:#2E6FD6;font-weight:700;line-height:1.5">진단 데이터 분석 — <strong>우리 학급·학년의 역량 분포는 어떠하고 어떤 지원이 필요한가?</strong></span></div>';
   body+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
   st.forEach(x=>body+='<div class="card" style="padding:11px 14px"><div style="font-size:20px;font-weight:800;color:'+x.c+';line-height:1.1">'+x.v+'</div><div style="font-size:10px;color:var(--m);margin-top:2px">'+x.lb+'</div></div>');
   body+='</div>';
@@ -3569,12 +3985,26 @@ function pgSchoolView(){
   const done=sl.filter(s=>s.scores).length;
   const rate=sl.length?Math.round(done/sl.length*100):0;
   const totalRounds=sl.reduce((a,s)=>a+((s.scoreHistory||[]).length||(s.scores?1:0)),0);
-  const supCnt=sl.reduce((a,s)=>a+((s.supports||[]).length),0);
+  const supAll=[]; sl.forEach(s=>(s.supports||[]).forEach(x=>supAll.push(x)));
+  const supCnt=supAll.length, supDone=supAll.filter(x=>x.status==="완료").length;
+  const supRun=supAll.filter(x=>x.status==="진행중").length;
   const st=[{lb:"누적 학생",v:sl.length,c:"var(--p)"},{lb:"진단 완료",v:done,c:"#22C79A"},
             {lb:"누적 진단",v:totalRounds,c:"#5B6EE8"},{lb:"지원 기록",v:supCnt,c:"#F27A50"}];
   body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;margin-bottom:14px">';
   st.forEach(x=>body+='<div class="card" style="padding:13px 15px"><div style="font-size:25px;font-weight:900;color:'+x.c+';line-height:1.1">'+x.v+'</div><div style="font-size:10.5px;color:var(--m);margin-top:3px;font-weight:600">'+x.lb+'</div></div>');
   body+='</div>';
+  // 관리자가 궁금한 건 점수보다 "실제로 몇 명을 지원했고 얼마나 진행됐나"이다
+  if(supCnt){
+    body+='<div class="card" style="padding:12px 15px;margin-bottom:14px">';
+    body+='<div style="font-size:11.5px;font-weight:800;margin-bottom:8px">지원 진행 현황</div>';
+    body+='<div style="display:flex;gap:7px;flex-wrap:wrap">';
+    [["예정",supCnt-supRun-supDone,"#8A8FA3"],["진행 중",supRun,"#F5A623"],["완료",supDone,"#22C79A"]].forEach(([k,v,c])=>{
+      body+='<div style="flex:1;min-width:84px;text-align:center;padding:9px 6px;border-radius:10px;background:'+c+'14">'
+        +'<div style="font-size:18px;font-weight:900;color:'+c+';line-height:1">'+v+'</div>'
+        +'<div style="font-size:10px;color:var(--m);margin-top:2px">'+k+'</div></div>';
+    });
+    body+='</div></div>';
+  }
 
   // 진단률 게이지
   body+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">';
@@ -3646,22 +4076,46 @@ body+='<div id="sec-basic" class="sec-anchor"></div><div class="card" style="pad
 +STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
 +'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
 +'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.</div></div>';
+/* 화면을 내려가는 순서가 곧 일하는 순서가 되도록 배치한다.
+   STEP 1 진단 → STEP 2 지원 → STEP 3 성장 → STEP 4 기록 */
+body+=hStepBar(1);
 body+='<div id="sec-result" class="sec-anchor"></div>'+hDiagSummary(s);
-body+='<div id="sec-note" class="sec-anchor"></div>'+hTeacherNote(s);
-if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);if(wk&&wk[1]<75)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';}
+if(s.scores){body+=hRoundTabs(s);body+=hHiLo(s);body+=hAutoAnalysis(s);}
 else body+='<div class="card" style="text-align:center;padding:20px"><div style="font-size:12px;color:var(--m);margin-bottom:12px">아직 진단 설문이 완료되지 않았어요.</div><button id="btn-start-survey" class="btn-p" style="width:auto;padding:10px 22px;font-size:13px">📋 진단 설문 시작하기</button></div>';
-// 성장 추이 카드
+  body+='<div id="sec-raw" class="sec-anchor"></div>'+hRawAnswers(s);
+
+// ── STEP 2 지원 ──
+body+=hStepBar(2);
+body+='<div id="sec-note" class="sec-anchor"></div>'+hTeacherNote(s);
+if(s.scores&&wk&&wk[1]<T_GOOD)body+='<div class="card" style="padding:11px 13px;background:'+SUBM[wk[0]].bg+';font-size:12px;line-height:1.65"><span style="font-weight:800;color:'+SUBM[wk[0]].c+'">'+wk[0]+'</span> 영역이 '+wk[1]+'점으로 가장 낮아요. <strong style="color:'+SUBM[wk[0]].c+'">'+hcv(progOf(wk[0]))+'</strong>을 추천합니다.</div>';
+  body+='<div id="sec-support" class="sec-anchor"></div>'+hSupportPanel(s,S.programs||defPrograms());
+
+// ── STEP 3 성장 ──
 const hist=s.scoreHistory||[];
 if(hist.length>=1){
-  body+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  body+=hStepBar(3);
+  body+='<div id="sec-growth" class="sec-anchor"></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   body+='<div style="font-size:13px;font-weight:700">📈 성장 추이</div>';
   body+='<span style="font-size:11px;color:var(--m)">총 '+hist.length+'회 진단</span></div>';
   body+=hGrowthChart(hist, s.supports);
+  // 1차와 최근을 한 장에 겹쳐 본다
+  if(hist.length>=2){
+    body+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--b)">';
+    body+='<div style="font-size:12px;font-weight:800;margin-bottom:8px">1차와 견주어 보기</div>';
+    body+='<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center">';
+    body+=hRadarPair(hist[0].scores, hist[hist.length-1].scores, 240);
+    body+='<div style="display:flex;flex-direction:column;gap:7px">';
+    body+='<div style="display:flex;align-items:center;gap:7px"><span style="width:20px;height:2px;background:#8A8FA3;display:inline-block"></span><span style="font-size:11px;color:var(--m);font-weight:700">1차 '+hcv(hist[0].date||"")+'</span></div>';
+    body+='<div style="display:flex;align-items:center;gap:7px"><span style="width:20px;height:3px;background:#5B4EE8;display:inline-block"></span><span style="font-size:11px;color:var(--p);font-weight:800">'+hist.length+'차 '+hcv(hist[hist.length-1].date||"")+'</span></div>';
+    body+='</div></div></div>';
+  }
+  body+=hRoundCompare(s);                       // 1차·2차 비교 표
   body+='</div>';
 }
-  body+='<div id="sec-raw" class="sec-anchor"></div>'+hRawAnswers(s);
-  body+='<div id="sec-support" class="sec-anchor"></div>'+hSupportPanel(s,S.programs||defPrograms());
   body+='<div id="sec-case" class="sec-anchor"></div>'+hCaseReport(s);
+
+// ── STEP 4 기록 ──
+body+=hStepBar(4);
   body+='<div id="sec-team" class="sec-anchor"></div>'+hTeamPanel(s);
   const _extN=(s.logs||[]).filter(l=>EXT_ORGS.some(o=>String(l.author||"").indexOf(o)===0)).length;
   body+='<div id="sec-log" class="sec-anchor"></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px"><div style="font-size:13px;font-weight:700">교사 협업 기록장</div>'
@@ -3679,10 +4133,10 @@ if(hist.length>=1){
     body+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">';
     body+='<span style="font-size:19px">✍️</span>';
     body+='<div style="flex:1"><div class="eyebrow">기록</div>';
-    body+='<div style="font-size:14px;font-weight:800;margin-top:3px;letter-spacing:-.02em">학교생활기록부 종합의견</div></div>';
-    if(fresh)body+='<span style="font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;background:'+(dr.mode==="ai"?"var(--pl)":"var(--bg)")+';color:'+(dr.mode==="ai"?"var(--p)":"var(--m)")+';white-space:nowrap">'+(dr.mode==="ai"?"AI 작성":"자동 작성")+'</span>';
+    body+='<div style="font-size:14px;font-weight:800;margin-top:3px;letter-spacing:-.02em">학교생활기록 참고 문장</div></div>';
+    if(fresh)body+='<span style="font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;background:'+(dr.mode==="ai"?"var(--pl)":"var(--bg)")+';color:'+(dr.mode==="ai"?"var(--p)":"var(--m)")+';white-space:nowrap">'+(dr.mode==="ai"?"AI 참고 초안":"자동 참고 초안")+'</span>';
     body+='</div>';
-    body+='<div style="font-size:11.5px;color:var(--m);margin:5px 0 12px;line-height:1.65">진단 결과와 기록을 바탕으로 자동으로 작성됩니다. 그대로 쓰시거나 고쳐서 쓰세요.</div>';
+    body+='<div style="font-size:11.5px;color:var(--m);margin:5px 0 12px;line-height:1.65">진단 결과 · 교사 관찰 · 지원 내역을 참고해 초안을 만들어 드려요. 선생님이 검토하고 고쳐서 쓰시는 자료예요.</div>';
     // 관찰 자료가 비어 있으면 초안이 자기보고에만 기대게 된다. 그 사실을 알린다.
     {
       const nNote=((s.tcNote||"").trim()?1:0), nLog=(s.logs||[]).length, nSup=(s.supports||[]).length;
@@ -4071,6 +4525,35 @@ function pgAdmin(){
     body += '<button id="btn-admin-lock" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:10px;cursor:pointer">🔒 잠금</button>';
     body += '</div>';
 
+    /* ── 계정별 접근 범위 ─────────────────────────────────
+       "누가 어디까지 볼 수 있는가"를 성과보고회 자리에서 바로
+       답할 수 있도록, 지금 코드가 실제로 어떻게 동작하는지 적어 둔다.
+       화면을 숨긴 것과 길을 끊은 것을 구분해서 밝힌다. */
+    body += '<div class="card">';
+    body += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="font-size:20px">🔑</span>';
+    body += '<div><div style="font-size:14px;font-weight:800">계정별 접근 범위</div>';
+    body += '<div style="font-size:11px;color:var(--m);margin-top:2px">지금 설정된 그대로예요. 개인정보 점검 때 그대로 보여 주세요.</div></div></div>';
+    const ACL=[
+      ["🎒 학생","자기 설문만","다른 학생 정보 접근 불가 · 점수도 보지 않음","#F2568E","#FFF0F6"],
+      ["📋 담임교사","자기 반 학생 전체","진단·관찰·지원·기록 모두. 다른 반은 목록에 뜨지 않음","#5B4EE8","#EDEBFF"],
+      ["🏫 전담교사","전교생","반별 보기로 좁혀서 확인","#2E6FD6","#E6F2FF"],
+      ["🔐 관리자","전체 + 설정","DB 연결·비밀번호·내보내기·초기화","#8B5CF6","#F4EFFF"],
+      ["🧭 체험 계정","가상 학생만","서버 로그인을 하지 않아 실제 자료를 요청할 수단이 없음. 저장소도 분리","#12A47C","#E6F9F2"]
+    ];
+    body += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:11px">';
+    ACL.forEach(([who,scope,memo,c,bg])=>{
+      body += '<div style="padding:10px 12px;border-radius:11px;background:'+bg+'">'
+        +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
+        +'<span style="font-size:12px;font-weight:800;color:'+c+'">'+who+'</span>'
+        +'<span style="font-size:11.5px;font-weight:700;color:var(--t)">'+scope+'</span></div>'
+        +'<div style="font-size:10.5px;color:var(--m);margin-top:4px;line-height:1.6">'+memo+'</div></div>';
+    });
+    body += '</div>';
+    body += '<div style="margin-top:11px;padding:10px 12px;border-radius:11px;background:#FFF8EC;border:1px solid #FBE3B8;font-size:10.5px;color:#8A5B14;line-height:1.7">'
+      +'<strong>남은 과제</strong> — 위 구분은 앱에서 거는 제한이에요. 서버(Supabase) 쪽에서도 '
+      +'계정별 행 단위 권한(RLS)을 걸어 두면 더 단단해집니다.</div>';
+    body += '</div>';
+
     // ── Supabase DB 연결 ──
     const sbUrl=localStorage.getItem("sb_url")||"";
     const sbKey=localStorage.getItem("sb_key")||"";
@@ -4271,61 +4754,296 @@ function pgAdmin(){
 }
 
 // ── 지원 프로그램 ─────────────────────────────────────────
-function pgSupport(){
-  const{programs:progs,tcGrade,tcCls,tcIsSpecial}=S;
-  // 담임은 자기 반만, 전담·연구부는 전교생
-  const sl=tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls);
-  const done=sl.filter(s=>s.scores);
-  const needSupport={};
-  SUBS.forEach(k=>{const ns=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<T_NEED;});if(ns.length)needSupport[k]=ns;});
-  const totalNeed=new Set(Object.values(needSupport).flat().map(s=>s.id)).size;
-  let body=hTopbar("지원 프로그램 관리",false);
-  body+='<div style="padding:16px 20px;max-width:900px">';
-  body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:14px;font-weight:600">'
-    +(tcIsSpecial?"학교 전체":(tcGrade+"학년 "+tcCls+"반"))+' · 진단 완료 '+done.length+'명</div>';
-  // 요약 카드
-  body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center"><div style="font-size:30px;font-weight:900;color:var(--d)">'+totalNeed+'</div><div style="font-size:12px;color:var(--m);margin-top:3px">'+T_NEED+'점 미만이 하나라도 있는 학생</div></div>';
-  body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
-  SUBS.forEach(k=>{const cnt=(needSupport[k]||[]).length;
-    body+='<div class="card" style="padding:13px;text-align:center;border-left:4px solid '+SUBM[k].c+'"><div style="font-size:22px;font-weight:900;color:'+SUBM[k].c+'">'+cnt+'</div><div style="font-size:10.5px;color:var(--m);margin-top:3px;line-height:1.4">'+hcv(k)+'</div></div>';});
+/* ══ 활동 참여 이력 한 번에 연계하기 ═══════════════════════
+   연구학교 1년차의 현실: 한국어 지원·상담·돌봄·학년 프로젝트 같은 활동은
+   이미 돌아가고 있었는데 기록만 시스템에 들어오지 않았다.
+   복지사·한국어학급·담임 선생님께 받은 명단을 보고, 프로그램 하나를 고른 뒤
+   참여한 학생을 체크해 한꺼번에 기록한다.
+
+   ⚠️ 없는 일을 만들어 넣지 않는다. 실제로 참여한 학생만 체크한다.
+      기록된 건은 '기존 참여 활동을 연계 기록'으로 남아, 나중에
+      "진단을 보고 지원했다"고 잘못 읽히지 않는다. */
+function pgSupLink(){
+  const{tcGrade,tcCls,tcIsSpecial}=S;
+  const sl=scopeStudents(tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls))
+    .slice().sort((a,b)=>(a.grade-b.grade)||(a.cls-b.cls)||String(a.name).localeCompare(String(b.name),"ko"));
+  const flat=[]; SUBS.forEach(d=>(PROG_LIB[d]||[]).forEach(x=>flat.push({...x,dom:d})));
+  const pick=S.linkProg?flat.find(x=>x.n===S.linkProg):null;
+  const sel=S.linkSel||{};
+  const selN=Object.keys(sel).filter(k=>sel[k]).length;
+
+  let body=hTopbar("활동 참여 이력 연계",false);
+  body+='<div style="padding:16px 20px;max-width:860px">';
+  body+='<div style="padding:12px 15px;border-radius:13px;background:#FFF8EC;border:1px solid #FBE3B8;margin-bottom:14px">';
+  body+='<div style="font-size:12.5px;font-weight:800;color:#8A5B14;margin-bottom:5px">이미 하고 있던 활동을 기록으로 옮기는 화면이에요</div>';
+  body+='<div style="font-size:11px;color:#8A5B14;line-height:1.75">한국어 지원, 상담, 방과후 돌봄, 학년 프로젝트, 자치활동처럼 <strong>실제로 학생이 참여했던 활동</strong>을 고르고, 참여한 학생을 체크해 한 번에 기록합니다.<br>'
+    +'없던 일을 새로 만들지 말고, 기억나는 범위에서 실제 참여만 남겨 주세요. 날짜가 불확실하면 대략의 시작일로 두어도 됩니다.</div></div>';
+
+  // ① 프로그램 고르기
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:9px">① 어떤 활동인가요?</div>';
+  body+='<select id="link-prog" style="width:100%;padding:11px 13px;border-radius:10px;border:1.5px solid var(--b);font-size:13.5px;background:#fff;color:var(--t);outline:none;font-family:inherit;cursor:pointer">';
+  body+='<option value="">— 학교 운영 프로그램에서 고르기 —</option>';
+  SUBS.forEach(d=>{
+    const lib=PROG_LIB[d]||[]; if(!lib.length)return;
+    body+='<optgroup label="'+hcv(d)+'">';
+    lib.forEach(x=>{body+='<option value="'+hcv(x.n)+'"'+(S.linkProg===x.n?" selected":"")+'>'+hcv(x.n)+' ('+hcv(x.o)+')</option>';});
+    body+='</optgroup>';
+  });
+  body+='</select>';
+  if(pick){
+    const dm=SUBM[pick.dom], cm=PROG_CATS[pick.c]||{lb:"",c:"#8A8FA3"};
+    body+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:'+dm.bg+'">';
+    body+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px">';
+    body+='<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px;background:'+cm.c+';color:#fff">'+cm.lb+'</span>';
+    body+='<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;background:#ffffffAA;color:'+dm.c+'">주 '+hcv(dm.s)+'</span>';
+    (pick.x||[]).forEach(k=>{if(SUBM[k])body+='<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:5px;background:#ffffffAA;color:'+SUBM[k].c+'">연계 '+hcv(SUBM[k].s)+'</span>';});
+    body+='</div>';
+    body+='<div style="font-size:10.5px;color:'+dm.c+';line-height:1.6">'+hcv(pick.o)+(pick.d?(' · '+hcv(pick.d)):'')+'</div></div>';
+    // 기간·상태
+    body+='<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">';
+    body+='<div style="flex:1.3;min-width:130px"><div style="font-size:11px;font-weight:700;margin-bottom:5px">시작일 <span style="font-weight:600;color:var(--m)">(대략이어도 됨)</span></div>'
+      +'<input id="link-start" type="date" value="'+hcv(S.linkStart||"2026-04-01")+'" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none;font-family:inherit"/></div>';
+    body+='<div style="flex:.8;min-width:80px"><div style="font-size:11px;font-weight:700;margin-bottom:5px">회기수</div>'
+      +'<input id="link-ses" type="number" min="1" max="60" value="'+(S.linkSes||8)+'" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none"/></div>';
+    body+='<div style="flex:1;min-width:95px"><div style="font-size:11px;font-weight:700;margin-bottom:5px">상태</div>'
+      +'<select id="link-status" style="width:100%;padding:9px 10px;border-radius:9px;border:1.5px solid var(--b);font-size:12.5px;background:#fff;color:var(--t);outline:none;font-family:inherit;cursor:pointer">'
+      +SUP_ST.map(x=>'<option value="'+x+'"'+((S.linkStatus||"완료")===x?" selected":"")+'>'+x+'</option>').join("")+'</select></div></div>';
+    body+='<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;margin-bottom:5px">운영 내용 / 담당 <span style="font-weight:600;color:var(--m)">(선택)</span></div>'
+      +'<input id="link-memo" value="'+hcv(S.linkMemo||"")+'" placeholder="예) 주 1회 방과후 소그룹, 한국어학급 김○○ 교사" style="width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--b);font-size:13px;background:#fff;color:var(--t);outline:none"/></div>';
+  }
   body+='</div>';
-  if(Object.keys(needSupport).length===0){
+
+  // ② 참여 학생 고르기
+  if(pick){
+    body+='<div class="card" style="margin-bottom:12px">';
+    body+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+    body+='<span style="font-size:12.5px;font-weight:800">② 실제로 참여한 학생</span>';
+    body+='<span id="link-count" style="font-size:11px;font-weight:700;color:var(--p)">'+selN+'명 선택</span>';
+    body+='<button id="link-clear" style="margin-left:auto;padding:5px 11px;border-radius:8px;border:1px solid var(--b);background:var(--s);color:var(--m);font-size:11px;font-weight:700;cursor:pointer">선택 해제</button></div>';
+    if(!sl.length){
+      body+='<div style="padding:24px;text-align:center;color:var(--m);font-size:12.5px">이 범위에 등록된 학생이 없어요.</div>';
+    }else{
+      body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px">';
+      sl.forEach(st=>{
+        const on=!!sel[st.id];
+        const had=(st.supports||[]).some(x=>x.prog===pick.n);
+        body+='<label class="link-stu" style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:11px;cursor:pointer;border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--pl)":"var(--s)")+'">';
+        body+='<input type="checkbox" class="link-ck" data-id="'+st.id+'"'+(on?" checked":"")+(had?" disabled":"")+' style="width:15px;height:15px;accent-color:var(--p);cursor:pointer;flex-shrink:0"/>';
+        body+='<span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700;color:'+(had?"var(--m)":"var(--t)")+'">'+hcv(st.name)+'</span>';
+        body+='<span style="display:block;font-size:10px;color:var(--m);margin-top:1px">'+st.grade+'-'+st.cls+(had?" · 이미 기록됨":"")+'</span></span></label>';
+      });
+      body+='</div>';
+    }
+    body+='</div>';
+
+    // ③ 저장
+    body+='<div class="card">';
+    body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:8px">③ 기록 성격</div>';
+    body+='<div style="padding:10px 12px;border-radius:10px;background:var(--pl);font-size:11.5px;color:var(--p);font-weight:700;line-height:1.65">기존 참여 활동을 연계 기록</div>';
+    body+='<div style="font-size:10.5px;color:var(--m);margin-top:7px;line-height:1.7">이렇게 저장된 건은 <strong>진단을 보고 새로 연결한 지원</strong>과 구분됩니다. 연구보고서에서 1년차 운영을 있는 그대로 설명할 수 있어요.</div>';
+    body+='<button id="link-save" style="width:100%;margin-top:12px;padding:12px 0;border-radius:11px;border:none;background:'+(selN?"var(--p)":"var(--b)")+';color:'+(selN?"#fff":"var(--m)")+';font-size:13.5px;font-weight:800;cursor:'+(selN?"pointer":"default")+'">'
+      +(selN?("💾 "+selN+"명에게 한 번에 기록하기"):"학생을 먼저 선택해 주세요")+'</button>';
+    body+='</div>';
+  }
+  body+='</div>';
+  return hLayout(tcSidebar(),body);
+}
+
+function pgSupport(){
+  const{tcGrade,tcCls,tcIsSpecial}=S;
+  const progs=(S.programs&&S.programs.length)?S.programs:defPrograms();
+  // 담임은 자기 반만, 전담·연구부는 전교생 (체험 계정은 고른 범위)
+  const sl=scopeStudents(tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls));
+  const done=sl.filter(s=>s.scores);
+
+  /* ── 영역별 '지원 검토' 대상 ────────────────────────────
+     ⚠️ 여기 숫자는 "이 학생들에게 문제가 있다"가 아니라
+        "교사가 지원을 검토해 볼 영역"이다. 문구를 그에 맞춘다. */
+  const needBy={}, needPrev={};
+  SUBS.forEach(k=>{
+    needBy[k]=done.filter(s=>{const r=subScores(s.scores)||{};return (Number(r[k])||0)<T_NEED;});
+    // 1차 회차 기준으로도 세어 두면 "몇 명에서 몇 명이 되었는지"를 말할 수 있다
+    needPrev[k]=done.filter(s=>{
+      const h=s.scoreHistory||[]; if(h.length<2)return false;
+      const r=subScores(h[0].scores)||{}; return (Number(r[k])||0)<T_NEED;
+    }).length;
+  });
+  const totalNeed=new Set(SUBS.flatMap(k=>needBy[k]).map(s=>s.id)).size;
+  const hasRound2=done.some(s=>(s.scoreHistory||[]).length>=2);
+
+  // 실제 등록된 지원 내역 모으기
+  const allSup=[]; sl.forEach(s=>(s.supports||[]).forEach(x=>allSup.push({...x,sid:s.id,sname:s.name})));
+  const supBy=p=>allSup.filter(x=>x.prog===p);
+  const stCount=list=>({
+    예정:list.filter(x=>x.status==="예정").length,
+    진행중:list.filter(x=>x.status==="진행중").length,
+    완료:list.filter(x=>x.status==="완료").length
+  });
+
+  let body=hTopbar("맞춤지원",false);
+  body+='<div style="padding:16px 20px;max-width:900px">';
+  body+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 13px;border-radius:12px;background:#FFF3E8">'
+    +'<span style="font-size:14px">📅</span>'
+    +'<span style="font-size:11.5px;color:#C2680F;font-weight:700;line-height:1.5">진단을 실제 교육활동으로 — <strong>그래서 무엇을 해줄 것인가?</strong></span></div>';
+  body+='<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px">';
+  body+='<span style="font-size:12.5px;color:var(--m);font-weight:600">'
+    +(tcIsSpecial?hcv(scopeLabel()):(tcGrade+"학년 "+tcCls+"반"))+' · 진단 완료 '+done.length+'명</span>';
+  // 이미 하고 있던 활동을 기록으로 옮기는 입구
+  body+='<button id="btn-sup-link" style="margin-left:auto;padding:7px 14px;border-radius:10px;border:1.5px solid var(--p);background:var(--s);color:var(--p);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🔗 활동 참여 이력 연계하기</button>';
+  body+='</div>';
+
+  // ── 요약 ──
+  body+='<div class="card" style="padding:16px;margin-bottom:14px;text-align:center">';
+  body+='<div style="font-size:30px;font-weight:900;color:var(--d);line-height:1.1">'+totalNeed+'<span style="font-size:15px;margin-left:2px">명</span></div>';
+  body+='<div style="font-size:12.5px;color:var(--t);font-weight:800;margin-top:4px">맞춤지원 살펴보기 대상</div>';
+  body+='<div style="font-size:10.5px;color:var(--m);margin-top:5px;line-height:1.6">6개 영역 중 '+T_NEED+'점 미만 영역이 1개 이상 있는 학생<br>'
+    +'<span style="opacity:.8">영역별 인원을 더한 수가 아니라, 중복을 뺀 실제 학생 수예요.</span></div></div>';
+
+  // ── 영역별 맞춤지원 검토 현황 ──
+  body+='<div style="font-size:13px;font-weight:800;margin-bottom:9px">영역별 맞춤지원 검토 현황</div>';
+  body+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
+  SUBS.forEach(k=>{
+    const cnt=needBy[k].length, pv=needPrev[k], d=cnt-pv;
+    body+='<div class="card" style="padding:13px;text-align:center;border-left:4px solid '+SUBM[k].c+'">';
+    body+='<div style="font-size:22px;font-weight:900;color:'+SUBM[k].c+';line-height:1.1">'+cnt+'</div>';
+    body+='<div style="font-size:10.5px;color:var(--m);margin-top:3px;line-height:1.4">'+hcv(k)+'</div>';
+    // 2차가 있으면 1차 대비 변화를 적는다 — 연구학교 성과가 이 줄에서 드러난다
+    if(hasRound2){
+      const col=d<0?"#0E8F68":d>0?"#C2334C":"var(--m)";
+      body+='<div style="font-size:9.5px;font-weight:700;color:'+col+';margin-top:5px;padding-top:5px;border-top:1px dashed var(--b)">'
+        +'1차 '+pv+'명 → '+cnt+'명'+(d!==0?(' <span style="font-weight:900">'+(d<0?"▼":"▲")+Math.abs(d)+'</span>'):' –')+'</div>';
+    }
+    body+='</div>';
+  });
+  body+='</div>';
+
+  // ── 영역별 상세 ──
+  const liveDoms=SUBS.filter(k=>needBy[k].length);
+  if(!liveDoms.length){
     body+='<div class="card" style="padding:40px;text-align:center;color:var(--m)">🌟 모든 학생이 '+T_NEED+'점 이상이에요!</div>';
   } else {
     body+='<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">';
-    SUBS.forEach(d=>{
-      const ns=needSupport[d]||[];if(!ns.length)return;
-      const lib=PROG_LIB[d]||[];
+    liveDoms.forEach(d=>{
+      const ns=needBy[d], lib=PROG_LIB[d]||[];
+      const open=(S.supOpenDom===d);
       body+='<div class="card" style="border-left:4px solid '+SUBM[d].c+'">';
-      body+='<div style="margin-bottom:11px">';
-      body+='<div style="font-size:13.5px;font-weight:800;color:'+SUBM[d].c+'">'+hcv(d)+' · 지원 필요 '+ns.length+'명</div>';
+      body+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px">';
+      body+='<span style="font-size:13.5px;font-weight:800;color:'+SUBM[d].c+'">'+hcv(d)+'</span>';
+      body+='<span style="font-size:11.5px;font-weight:700;color:var(--m)">지원 검토 '+ns.length+'명</span>';
+      // 학생 이름은 기본으로 감춘다 — 화면을 함께 보는 자리가 많다
+      body+='<button class="supdom-toggle" data-d="'+hcv(d)+'" style="margin-left:auto;padding:5px 12px;border-radius:9px;border:1px solid var(--b);background:'+(open?"var(--bg)":"var(--s)")+';color:var(--m);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'
+        +(open?"명단 접기":"명단 보기 ("+ns.length+")")+'</button>';
+      body+='</div>';
+
       if(lib.length){
-        body+='<div style="font-size:11px;color:var(--m);margin-top:7px;line-height:1.6">이 영역에 쓸 수 있는 학교 운영 프로그램</div>';
+        body+='<div style="font-size:11px;color:var(--m);line-height:1.6">맞춤지원 시 참고할 수 있는 학교 프로그램</div>';
         body+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">';
-        lib.slice(0,6).forEach(x=>{body+='<span style="font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:20px;background:'+SUBM[d].bg+';color:'+SUBM[d].c+'">'+hcv(x.n)+'</span>';});
+        lib.slice(0,6).forEach(x=>{
+          const cm=PROG_CATS[x.c];
+          body+='<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:20px;background:'+SUBM[d].bg+';color:'+SUBM[d].c+'">'
+            +(cm?'<span style="font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;background:'+cm.c+';color:#fff">'+cm.lb+'</span>':'')
+            +hcv(x.n)+'</span>';
+        });
         if(lib.length>6)body+='<span style="font-size:10.5px;color:var(--m);padding:4px 6px">외 '+(lib.length-6)+'개</span>';
         body+='</div>';
+        // 이 한 줄이 시스템의 교육적 신뢰도를 지킨다
+        body+='<div style="font-size:9.5px;color:var(--m);margin-top:7px;line-height:1.6">※ 진단 결과만으로 지원을 결정하지 않고 교사 관찰 및 학생 상황을 함께 고려합니다.</div>';
       }
-      body+='</div><div style="display:flex;flex-wrap:wrap;gap:8px">';
-      ns.forEach(s=>{
-        body+='<div style="background:var(--bg);border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:8px">';
-        body+='<div style="width:30px;height:30px;border-radius:50%;background:'+SUBM[d].bg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+SUBM[d].c+'">'+s.name[0]+'</div>';
-        body+='<div><div style="font-size:12px;font-weight:600">'+hcv(s.name)+'</div><div style="font-size:10px;color:var(--m)"><strong style="color:'+SUBM[d].c+'">'+((subScores(s.scores)||{})[d]||0)+'점</strong></div></div></div>';
-      });
-      body+='</div></div>';
+
+      if(open){
+        body+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--b)">';
+        ns.forEach(s=>{
+          const mine=(s.supports||[]).filter(x=>x.dom===d).length;
+          body+='<div class="sup-stu" data-id="'+s.id+'" style="cursor:pointer;background:var(--bg);border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:8px">';
+          body+='<div style="width:30px;height:30px;border-radius:50%;background:'+SUBM[d].bg+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+SUBM[d].c+'">'+hcv(s.name[0])+'</div>';
+          body+='<div><div style="font-size:12px;font-weight:600">'+hcv(s.name)+'</div>';
+          body+='<div style="font-size:10px;color:var(--m)"><strong style="color:'+SUBM[d].c+'">'+((subScores(s.scores)||{})[d]||0)+'점</strong>'
+            +(mine?' · 지원 '+mine+'건':'')+'</div></div></div>';
+        });
+        body+='</div>';
+        body+='<div style="font-size:9.5px;color:var(--m);margin-top:7px">학생을 누르면 그 학생의 지원 기록으로 바로 갑니다.</div>';
+      }
+      body+='</div>';
     });
     body+='</div>';
   }
-  body+='<div style="font-size:14px;font-weight:700;margin-bottom:12px">📋 지원 프로그램 목록</div>';
-  body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">';
-  progs.forEach(p=>{
-    const enrolled=done.filter(s=>s.scores&&s.scores[p.domain]<p.target).length;
-    body+='<div class="card" style="border-top:4px solid '+p.color+'">';
-    body+='<div style="font-size:13px;font-weight:700;margin-bottom:6px">'+p.name+'</div>';
-    body+='<div style="font-size:11px;color:var(--m);margin-bottom:8px;line-height:1.6">'+p.desc+'</div>';
-    body+='<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--m);padding-top:8px;border-top:1px solid var(--b)"><span>기준: '+p.domain+' <strong style="color:'+p.color+'">'+p.target+'점 미만</strong></span><span>대상 '+enrolled+'명 · '+p.sessions+'회기</span></div></div>';
+
+  // ── 학교 운영 프로그램 ──
+  /* 목록을 학교가 실제로 운영하는 사업으로 채운다. 진단 뒤에 새 프로그램을
+     만들기보다 이미 돌아가는 활동을 지원 자원으로 연결하는 것이
+     통합성장지원 취지에 맞고, 학생별 지원 기록과도 이름이 맞물린다. */
+  const cat=S.progCat||"all";
+  const flat=[];
+  SUBS.forEach(d=>(PROG_LIB[d]||[]).forEach(x=>flat.push({...x,dom:d})));
+  const shown=cat==="all"?flat:flat.filter(x=>x.c===cat);
+
+  body+='<div style="font-size:14px;font-weight:700;margin-bottom:4px">📋 학교 운영 프로그램 '+flat.length+'개</div>';
+  body+='<div style="font-size:11px;color:var(--m);margin-bottom:11px;line-height:1.6">진단 뒤에 새 프로그램을 따로 만들기보다, 이미 학교에서 운영 중인 활동을 지원 자원으로 연결합니다.</div>';
+
+  // 성격별로 추려 보기 — "상담보다 수업 속 지원부터" 같은 판단을 돕는다
+  body+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  body+='<button class="progcat" data-c="all" style="padding:6px 13px;border-radius:9px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1.5px solid '+(cat==="all"?"transparent":"var(--b)")+';background:'+(cat==="all"?"var(--p)":"var(--s)")+';color:'+(cat==="all"?"#fff":"var(--m)")+'">전체 '+flat.length+'</button>';
+  Object.keys(PROG_CATS).forEach(k=>{
+    const cm=PROG_CATS[k], n=flat.filter(x=>x.c===k).length;
+    if(!n)return;
+    const on=cat===k;
+    body+='<button class="progcat" data-c="'+k+'" style="padding:6px 13px;border-radius:9px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?cm.c:"var(--s)")+';color:'+(on?"#fff":cm.c)+'">'+cm.lb+' '+n+'</button>';
   });
-  body+='</div></div>';
+  body+='</div>';
+
+  body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px">';
+  shown.forEach(pr=>{
+    const dm=SUBM[pr.dom], cm=PROG_CATS[pr.c]||{lb:"",c:"#8A8FA3",bg:"var(--bg)"};
+    const review=needBy[pr.dom].length;                 // 이 영역에서 지원을 검토할 학생 수
+    const mine=supBy(pr.n), c=stCount(mine);
+    // 참여 학생의 1·2차 평균 변화 (효과가 아니라 '변화'로만 적는다)
+    let avgD=null;
+    const wh=mine.map(x=>sl.find(s=>s.id===x.sid)).filter(s=>s&&(s.scoreHistory||[]).length>=2);
+    if(wh.length){
+      const ds=wh.map(s=>{const h=s.scoreHistory,A=subScores(h[0].scores)||{},B=subScores(h[h.length-1].scores)||{};
+        return (Number(B[pr.dom])||0)-(Number(A[pr.dom])||0);});
+      avgD=Math.round(ds.reduce((a,b)=>a+b,0)/ds.length);
+    }
+    body+='<div class="card" style="border-top:4px solid '+dm.c+'">';
+    body+='<div style="font-size:12.5px;font-weight:800;line-height:1.4;margin-bottom:6px">'+hcv(pr.n)+'</div>';
+    body+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px">';
+    body+='<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px;background:'+cm.c+';color:#fff">'+cm.lb+'</span>';
+    body+='<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;background:'+dm.bg+';color:'+dm.c+'">주 '+hcv(dm.s)+'</span>';
+    // 한 활동이 여러 역량과 닿는다. 연계 영역을 적어 두면 현실에 더 가깝다.
+    (pr.x||[]).forEach(k=>{ if(SUBM[k])body+='<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--bg);color:'+SUBM[k].c+'">연계 '+hcv(SUBM[k].s)+'</span>'; });
+    body+='</div>';
+    body+='<div style="font-size:10.5px;color:var(--m);margin-bottom:9px;line-height:1.6">'+hcv(pr.o)+(pr.d?(' · '+hcv(pr.d)):'')+'</div>';
+    // 검토 대상과 실제 참여를 나눈다 — 섞으면 이미 배정된 것처럼 읽힌다
+    body+='<div style="display:flex;gap:6px;padding-top:9px;border-top:1px solid var(--b)">';
+    body+='<div style="flex:1;text-align:center;padding:7px 4px;border-radius:9px;background:var(--bg)">'
+      +'<div style="font-size:15px;font-weight:900;color:var(--m);line-height:1">'+review+'</div>'
+      +'<div style="font-size:9px;color:var(--m);margin-top:2px">지원 검토</div></div>';
+    body+='<div style="flex:1;text-align:center;padding:7px 4px;border-radius:9px;background:'+(mine.length?"#EDF1FF":"var(--bg)")+'">'
+      +'<div style="font-size:15px;font-weight:900;color:'+(mine.length?"#4C6FE8":"var(--m)")+';line-height:1">'+mine.length+'</div>'
+      +'<div style="font-size:9px;color:var(--m);margin-top:2px">실제 참여</div></div>';
+    body+='<div style="flex:1;text-align:center;padding:7px 4px;border-radius:9px;background:'+(c.완료?"#E4F8F1":"var(--bg)")+'">'
+      +'<div style="font-size:15px;font-weight:900;color:'+(c.완료?"#0E8F68":"var(--m)")+';line-height:1">'+c.완료+'</div>'
+      +'<div style="font-size:9px;color:var(--m);margin-top:2px">완료</div></div></div>';
+    if(mine.length){
+      body+='<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">';
+      [["예정",c.예정],["진행중",c.진행중],["완료",c.완료]].forEach(([k,v])=>{ if(!v)return;
+        body+='<span style="font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:6px;background:'+(SUP_ST_C[k]||"#8A8FA3")+'1F;color:'+(SUP_ST_C[k]||"#8A8FA3")+'">'+k+' '+v+'명</span>';});
+      body+='</div>';
+    }
+    if(avgD!==null){
+      const col=avgD>0?"#0E8F68":avgD<0?"#C2334C":"var(--m)";
+      body+='<div style="margin-top:7px;padding:7px 9px;border-radius:9px;background:#F7F6FC">'
+        +'<div style="font-size:9.5px;color:var(--m);line-height:1.5">참여 학생 1·2차 진단 평균 변화</div>'
+        +'<div style="font-size:14px;font-weight:900;color:'+col+';margin-top:1px">'+(avgD>0?"+":"")+avgD+'점</div></div>';
+    }
+    body+='</div>';
+  });
+  body+='</div>';
+  if(flat.some(pr=>supBy(pr.n).length)){
+    body+='<div style="font-size:9.5px;color:var(--m);margin-top:10px;line-height:1.7">※ 평균 변화는 해당 프로그램에 참여한 학생들의 1·2차 진단 점수 차이예요. 프로그램의 효과를 증명하는 수치는 아닙니다.</div>';
+  }
+  body+='</div>';
   return hLayout(tcSidebar(),body);
 }
 
@@ -4444,6 +5162,7 @@ body+='<div class="card" style="display:flex;gap:12px;align-items:center"><div s
 function updCC(){const ta=document.getElementById("neis-draft"),cc=document.getElementById("neis-count")||document.getElementById("char-count");if(ta&&cc)cc.textContent=ta.value.length+"자";}
 function showAiErr(msg){const el=document.getElementById("ai-error"),ld=document.getElementById("ai-loading");if(el){el.style.display="block";el.textContent="⚠ "+msg;}if(ld)ld.style.display="none";}
 async function genNeis(s){
+  if(isDemoMode()){ showAiErr("체험 계정에서는 AI 초안 생성을 쓰지 않아요. 아래 자동 작성 결과로 모양을 보실 수 있어요."); return; }
   const key=S.apiKey.trim();
   if(!key){showAiErr("API 키를 먼저 입력하고 저장해주세요.");return;}
   if(!s.scores){showAiErr("진단 설문을 먼저 완료해야 해요.");return;}
@@ -4502,9 +5221,10 @@ function render(){
     else if(menu==="classView")     h=pgClassView();
     else if(menu==="schoolView")    h=pgSchoolView();
     else if(menu==="support")       h=pgSupport();
+    else if(menu==="supLink")       h=pgSupLink();
     else if(menu==="notice")        h=pgNotice();
     else if(menu==="resource")      h=pgResource();
-    else if(menu==="admin")          h=pgAdmin();
+    else if(menu==="admin")          h=isDemoMode()?pgSurveyList():pgAdmin();   // 체험 계정은 관리자 화면에 들어갈 수 없다
     else if(menu==="detail")        h=pgDetail();
     else if(menu==="bulkAdd")       h=pgBulkAdd();
     else if(menu==="formAdd")       h=pgForm("add");
@@ -4568,14 +5288,20 @@ function bindEv(){
   // 공통
   on("backup-nudge",()=>set({menu:"admin"}));
   on("sync-badge",()=>{
+    if(isDemoMode())return;                       // 체험 계정에는 설정으로 가는 길이 없다
     if(!USE_DB()){ set({menu:"admin"}); toast("관리자 메뉴에서 DB를 연결해 주세요."); return; }
     toast("🔄 학교 데이터를 불러오는 중...");
     autoSync(true);
   });
   on("btn-logout",async()=>{
+    const wasDemo=isDemoMode();
     await sbSignOut();
-    set({page:"login",role:null,pwErr:"",sid:null,menu:"survey",students:[],diag:null,tcName:""});
-    toast("로그아웃했어요.");
+    // 체험을 마치면 다음 참관자를 위해 둘러본 흔적을 지운다
+    if(wasDemo)resetDemo();
+    S.demoMode=false;
+    set({page:"login",role:null,pwErr:"",sid:null,menu:"survey",students:[],diag:null,tcName:"",
+         tcIsSpecial:false,viewGrade:0,viewCls:0,fltState:"all"});
+    toast(wasDemo?"체험을 마쳤어요. 둘러본 내용은 처음 상태로 되돌렸어요.":"로그아웃했어요.");
   });
   onA(".nav-btn",e=>set({menu:e.currentTarget.dataset.menu,sid:null}));
   onA(".sf",e=>set({schoolFilter:e.target.dataset.key}));
@@ -4603,7 +5329,21 @@ function bindEv(){
     }
     on("btn-student",()=>set({page:"stuEnter",role:"student",stuGrade:3,stuCls:1,stuNameErr:""}));
     on("btn-teacher",()=>{const b=document.getElementById("pw-box");if(b)b.style.display=b.style.display==="none"?"block":"none";setTimeout(()=>document.getElementById("pw-input")&&document.getElementById("pw-input").focus(),50);});
-    on("btn-external",()=>set({page:"extEnter",role:"external",extOrg:EXT_ORGS[0],extName:""}));
+    // ── 체험 계정 입장 ──
+    // 서버 로그인을 하지 않는다. 토큰을 받지 않으므로 이 세션은
+    // 실제 학생 자료를 요청할 수단 자체가 없다.
+    on("btn-demo",()=>{
+      clearSession();                      // 혹시 남아 있던 교사 토큰을 버린다
+      S.demoMode=true;
+      S.students=loadDemo();
+      // 전교생 72명이 한꺼번에 뜨면 2~3분 안에 흐름을 보여 주기 어렵다.
+      // 한 학급부터 열어 두고, 필요하면 전학년으로 넓혀 보게 한다.
+      set({page:"teacher",role:"teacher",menu:"survey",
+           tcIsSpecial:true,tcName:"체험 계정",tcGrade:2,tcCls:1,
+           viewGrade:DEMO_START_G,viewCls:DEMO_START_C,fltState:"all",
+           sid:null,pwErr:"",loginEmail:"",acctEmail:"",diag:null});
+      toast("🧭 "+DEMO_START_G+"학년 "+DEMO_START_C+"반부터 둘러보세요. 전학년도 볼 수 있어요.");
+    });
     const reopen=()=>setTimeout(()=>{
       const b=document.getElementById("pw-box");if(b)b.style.display="block";
       const p=document.getElementById("pw-input");if(p)p.focus();
@@ -4627,6 +5367,17 @@ function bindEv(){
       // ① 계정에 저장해 둔 정보 ② 아이디에서 읽어낸 학년·반 순으로 적용한다
       const acct=parseAcct(email);
       S.acctEmail=String(email||"").trim();       // SB_EMAIL 이 비는 경우를 대비한 예비
+      // 예전에 참관용으로 나눠 준 아이디가 아직 돌아다닐 수 있다.
+      // 그 아이디로 들어오면 실제 자료 대신 체험 화면으로 보낸다.
+      if(isNamedDemo()){
+        clearSession();
+        S.demoMode=true; S.students=loadDemo();
+        set({page:"teacher",role:"teacher",menu:"survey",
+             tcIsSpecial:true,tcName:"체험 계정",tcGrade:2,tcCls:1,
+             viewGrade:DEMO_START_G,viewCls:DEMO_START_C,fltState:"all",sid:null,pwErr:"",loginEmail:"",diag:null});
+        toast("🧭 "+DEMO_START_G+"학년 "+DEMO_START_C+"반부터 둘러보세요.");
+        return;
+      }
       const prof=readTcProfile(r.user)||acct;
       if(applyTcProfile(prof)){
         if(acct&&acct.year)S.schoolYear=acct.year;
@@ -4762,6 +5513,71 @@ function bindEv(){
   }
 
   // ── 교사 설문관리 ──
+  // ── 활동 참여 이력 연계 ──
+  if(page==="teacher"&&menu==="supLink"){
+    const g=id=>{const e=document.getElementById(id);return e?e.value.trim():"";};
+    const lp=document.getElementById("link-prog");
+    if(lp)lp.addEventListener("change",()=>set({linkProg:lp.value,linkSel:{}}));
+    // 체크박스는 click 이 아니라 change 로 듣는다. 라벨 클릭·키보드 조작도
+    // change 는 받지만 click 은 놓치는 경우가 있다.
+    document.querySelectorAll(".link-ck").forEach(el=>el.addEventListener("change",e=>{
+      const id=e.currentTarget.dataset.id;
+      const nx={...(S.linkSel||{})}; nx[id]=e.currentTarget.checked;
+      S.linkSel=nx;
+      // 체크 표시만 바꾼다 — 다시 그리면 스크롤이 튄다
+      const lab=e.currentTarget.closest("label");
+      if(lab){lab.style.borderColor=nx[id]?"var(--p)":"var(--b)";lab.style.background=nx[id]?"var(--pl)":"var(--s)";}
+      const btn=document.getElementById("link-save");
+      const n=Object.keys(nx).filter(k=>nx[k]).length;
+      const cnt=document.getElementById("link-count"); if(cnt)cnt.textContent=n+"명 선택";
+      if(btn){btn.textContent=n?("💾 "+n+"명에게 한 번에 기록하기"):"학생을 먼저 선택해 주세요";
+        btn.style.background=n?"var(--p)":"var(--b)";btn.style.color=n?"#fff":"var(--m)";btn.style.cursor=n?"pointer":"default";}
+    }));
+    on("link-clear",()=>set({linkSel:{}}));
+    on("link-save",()=>{
+      const sel=S.linkSel||{};
+      const ids=Object.keys(sel).filter(k=>sel[k]);
+      if(!ids.length){toast("참여한 학생을 먼저 골라 주세요.");return;}
+      const flat=[]; SUBS.forEach(d=>(PROG_LIB[d]||[]).forEach(x=>flat.push({...x,dom:d})));
+      const pr=flat.find(x=>x.n===S.linkProg);
+      if(!pr){toast("활동을 먼저 골라 주세요.");return;}
+      const start=g("link-start")||td(), ses=Number(g("link-ses"))||8;
+      const stv=g("link-status")||"완료", memo=g("link-memo");
+      let n=0;
+      const next=S.students.map(st=>{
+        if(ids.indexOf(st.id)<0)return st;
+        if((st.supports||[]).some(x=>x.prog===pr.n))return st;    // 이미 있으면 건너뛴다
+        n++;
+        return {...st, supports:[...(st.supports||[]), {
+          id:uid(), dom:pr.dom, prog:pr.n, start:start, sessions:ses, status:stv,
+          why:["기존 참여 활동을 연계 기록"],
+          memo:memo||("["+pr.o+"] "+(pr.d||""))
+        }]};
+      });
+      S.students=next; saveSt(next);
+      // 서버에도 올린다 (체험 모드에서는 USE_DB 가 막혀 아무 일도 없다)
+      ids.forEach(id=>{const st=next.find(x=>x.id===id); if(st)dbSaveStudent(st).catch(()=>{});});
+      set({linkSel:{}, students:next});
+      toast("🔗 "+n+"명의 참여 이력을 기록했어요.");
+    });
+  }
+
+  // ── 맞춤지원 화면 ──
+  if(page==="teacher"&&menu==="support"){
+    on("btn-sup-link",()=>set({menu:"supLink",linkProg:"",linkSel:{}}));
+    onA(".progcat",e=>set({progCat:e.currentTarget.dataset.c}));
+    onA(".supdom-toggle",e=>{
+      const d=e.currentTarget.dataset.d;
+      set({supOpenDom:(S.supOpenDom===d)?null:d});   // 같은 걸 다시 누르면 접는다
+    });
+    // 학생을 누르면 그 학생의 지원 기록으로 바로 보낸다
+    onA(".sup-stu",e=>{
+      set({sid:e.currentTarget.dataset.id, menu:"detail", supOpen:false,
+           lAuth:S.tcIsSpecial?"전담교사":"담임교사", lTags:[], lMemo:"", neisText:""});
+      setTimeout(()=>{const el=document.getElementById("sec-support");if(el)el.scrollIntoView({behavior:"smooth"});},260);
+    });
+  }
+
   // ── 반별 보기 (성과발표회 계정) : 두 화면 모두에서 쓴다 ──
   if(page==="teacher"&&(menu==="survey"||menu==="classView")){
     onA(".scg",e=>{
@@ -5077,8 +5893,10 @@ function bindEv(){
       const g=id=>{const el=document.getElementById(id);return el?String(el.value).trim():"";};
       const nm=g("sup-name");
       if(!nm){toast("프로그램명을 입력해주세요.");return;}
+      const why=[...document.querySelectorAll(".sup-why:checked")].map(x=>x.value);
       const rec={id:uid(),dom:S.supDom||SUBS[0],prog:nm,start:g("sup-start")||td(),
-                 sessions:Number(g("sup-ses"))||0,status:g("sup-status")||"진행중",memo:g("sup-memo")};
+                 sessions:Number(g("sup-ses"))||0,status:g("sup-status")||"진행중",memo:g("sup-memo"),
+                 why:why};
       const us={...stu,supports:[...(stu.supports||[]),rec]};
       set({students:S.students.map(x=>x.id===sid?us:x),supOpen:false});
       dbSaveStudent(us);
