@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-10-06-04"/>
+<meta name="app-version" content="2026-10-17-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -912,7 +912,12 @@ function set(p){
   if(lm)S.lMemo=lm.value;
   if(sn)S.stuName=sn.value;
   Object.assign(S,typeof p==="function"?p(S):p);
-  if(S.students)saveSt(S.students);
+  /* ⚠️ 빈 배열은 저장하지 않는다.
+     로그아웃은 화면을 비우려고 students:[] 로 두는데, 그대로 저장하면
+     이 기기에 보관된 학생 명단이 통째로 지워진다. 실제로 체험 계정에서
+     로그아웃했을 때 선생님들 명단이 날아가는 일이 생겼다.
+     명단을 비우는 일은 관리자 화면의 초기화에서만 일어나야 한다. */
+  if(S.students&&S.students.length)saveSt(S.students);
   render();
 }
 
@@ -1082,7 +1087,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-10-06-04";
+const APP_VERSION = "2026-10-17-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1404,12 +1409,18 @@ function hScopeBar(){
   const btn=(on,lb,attrs)=>'<button '+attrs+' style="padding:7px 13px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;'
     +'border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+lb+'</button>';
 
-  let o='<div class="card" style="padding:13px 15px;margin-bottom:14px">';
+  const narrowed=!!g;      // 전학년이 아니라면 범위가 좁혀져 있다
+  let o='<div class="card" style="padding:13px 15px;margin-bottom:14px'+(narrowed?';border:1.5px solid var(--p)':'')+'">';
   o+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">';
   o+='<span style="font-size:12.5px;font-weight:800">🏫 반별 보기</span>';
   o+='<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--pl);color:var(--p)">'+hcv(scopeLabel())+'</span>';
   o+='<span style="flex:1"></span>';
-  o+='<span style="font-size:10.5px;color:var(--m)">'+scopeStudents(all).length+'명</span></div>';
+  o+='<span style="font-size:10.5px;color:var(--m)">'+scopeStudents(all).length+'명 / 전체 '+all.length+'명</span></div>';
+  // 왜 몇 명만 보이는지 화면이 스스로 밝힌다. 이게 없으면 자료가 사라진 줄 안다.
+  if(narrowed){
+    o+='<div style="margin-bottom:9px;padding:8px 11px;border-radius:9px;background:var(--pl);font-size:11px;color:var(--p);font-weight:700;line-height:1.6">'
+      +'지금 <strong>'+hcv(scopeLabel())+'</strong>만 보고 있어요. 전체를 보려면 아래 <strong>전학년</strong>을 눌러 주세요.</div>';
+  }
 
   o+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
   o+=btn(!g,"전학년",'class="scg" data-g="0"');
@@ -5296,8 +5307,9 @@ function bindEv(){
   on("btn-logout",async()=>{
     const wasDemo=isDemoMode();
     await sbSignOut();
-    // 체험을 마치면 다음 참관자를 위해 둘러본 흔적을 지운다
-    if(wasDemo)resetDemo();
+    // 체험을 마치면 다음 참관자를 위해 둘러본 흔적을 지운다.
+    // 순서가 중요하다 — 체험 칸을 먼저 비우고 나서 플래그를 끈다.
+    if(wasDemo){ S.students=[]; resetDemo(); }
     S.demoMode=false;
     set({page:"login",role:null,pwErr:"",sid:null,menu:"survey",students:[],diag:null,tcName:"",
          tcIsSpecial:false,viewGrade:0,viewCls:0,fltState:"all"});
@@ -5353,7 +5365,7 @@ function bindEv(){
       const v=pwEl?pwEl.value:"";
       if(!USE_DB()){
         // DB 미연결 — 예전 방식으로 동작
-        if(v===getPw())set({page:"tcEnter",role:"teacher",pwErr:""});
+        if(v===getPw()){S.demoMode=false;set({page:"tcEnter",role:"teacher",pwErr:"",viewGrade:0,viewCls:0,fltState:"all",sid:null});}
         else{set({pwErr:"비밀번호가 맞지 않습니다."});reopen();}
         return;
       }
@@ -5381,14 +5393,19 @@ function bindEv(){
       const prof=readTcProfile(r.user)||acct;
       if(applyTcProfile(prof)){
         if(acct&&acct.year)S.schoolYear=acct.year;
-        set({page:"teacher",menu:"survey",role:"teacher",pwErr:"",loginEmail:"",diag:null});
+        /* ⚠️ 체험 계정에서 보던 '4학년 2반' 같은 범위가 남아 있으면
+              선생님이 로그인해도 그 반만 보인다. 로그인할 때마다 지운다. */
+        S.demoMode=false;
+        set({page:"teacher",menu:"survey",role:"teacher",pwErr:"",loginEmail:"",diag:null,
+             viewGrade:0,viewCls:0,fltState:"all",supOpenDom:null,progCat:"all",sid:null});
         toast(S.tcIsSpecial?"전담교사로 입장했어요."
               :(S.tcGrade+"학년 "+S.tcCls+"반으로 입장했어요."));
         // 아이디로 읽은 정보는 계정에도 남겨둔다
         if(!readTcProfile(r.user)&&acct)saveTcProfile(acct);
       }else{
         // 아이디가 숫자 8자리 형식이 아닐 때만 물어본다
-        set({page:"tcEnter",role:"teacher",pwErr:"",loginEmail:"",diag:null});
+        S.demoMode=false;
+        set({page:"tcEnter",role:"teacher",pwErr:"",loginEmail:"",diag:null,viewGrade:0,viewCls:0,fltState:"all",sid:null});
       }
       autoSync(true);
     };
@@ -5480,7 +5497,8 @@ function bindEv(){
     on("btn-tc-go",async()=>{
       const ni=document.getElementById("tc-name");const name=ni?ni.value.trim():"";
       if(!name){toast("선생님 이름을 입력해 주세요.");if(ni)ni.focus();return;}
-      set({tcName:name,page:"teacher",menu:"survey"});
+      S.demoMode=false;
+      set({tcName:name,page:"teacher",menu:"survey",viewGrade:0,viewCls:0,fltState:"all",sid:null});
       // 계정에 저장 — 다음 로그인부터는 이 화면을 건너뛴다
       saveTcProfile({tcName:name,tcIsSpecial:!!S.tcIsSpecial,tcGrade:S.tcGrade,tcCls:S.tcCls})
         .then(saved=>{ if(saved)toast("정보를 저장했어요. 다음부터는 바로 들어옵니다."); });
