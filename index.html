@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-10-17-01"/>
+<meta name="app-version" content="2026-10-25-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1087,7 +1087,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-10-17-01";
+const APP_VERSION = "2026-10-25-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1358,21 +1358,15 @@ async function saveTcProfile(prof){
 }
 
 // 로그인 응답이나 이 기기 캐시에서 선생님 정보를 꺼낸다
-/* ── 성과발표회 참관용 계정 ────────────────────────────────
-   아래 다섯 아이디는 참관하시는 분들이 직접 만져 보는 계정이다.
-   학년 자리가 00이라 전담교사로 들어와 전체 학생을 보게 되는데,
-   그대로 두면 전교생이 한 화면에 쏟아져 살펴보기 어렵다.
-   그래서 이 계정에만 학년·반 범위를 고르는 줄을 붙인다.
-   계정을 추가하려면 이 목록에만 넣으면 된다. */
-const DEMO_IDS=["20260000","20260001","20260002","20260003","20260004"];
+/* ── 로그인한 계정의 아이디 ────────────────────────────────
+   아이디는 2026 + 학년(2자리) + 반(2자리) 꼴이다.
+   학년 자리가 00 이면 전담교사로, 전교생을 본다. */
 function acctId(){
   let e=SB_EMAIL||"";
   if(!e){try{e=localStorage.getItem("sb_email")||"";}catch(x){}}
   if(!e&&S&&S.acctEmail)e=S.acctEmail;
   return String(e).split("@")[0].trim();
 }
-// 목록에 이름이 올라 있는 참관용 계정인가 (사이드바 문구에만 쓴다)
-const isNamedDemo=()=>DEMO_IDS.indexOf(acctId())>=0;
 
 /* 반별 보기 줄을 띄울 계정인가.
    ⚠️ 아이디(이메일)로만 판정하면, 세션이 캐시에서 복구되어
@@ -5379,19 +5373,19 @@ function bindEv(){
       // ① 계정에 저장해 둔 정보 ② 아이디에서 읽어낸 학년·반 순으로 적용한다
       const acct=parseAcct(email);
       S.acctEmail=String(email||"").trim();       // SB_EMAIL 이 비는 경우를 대비한 예비
-      // 예전에 참관용으로 나눠 준 아이디가 아직 돌아다닐 수 있다.
-      // 그 아이디로 들어오면 실제 자료 대신 체험 화면으로 보낸다.
-      if(isNamedDemo()){
-        clearSession();
-        S.demoMode=true; S.students=loadDemo();
-        set({page:"teacher",role:"teacher",menu:"survey",
-             tcIsSpecial:true,tcName:"체험 계정",tcGrade:2,tcCls:1,
-             viewGrade:DEMO_START_G,viewCls:DEMO_START_C,fltState:"all",sid:null,pwErr:"",loginEmail:"",diag:null});
-        toast("🧭 "+DEMO_START_G+"학년 "+DEMO_START_C+"반부터 둘러보세요.");
-        return;
-      }
+      /* 예전에는 참관용으로 나눠 준 아이디(20260000 등)로 로그인하면
+         체험 화면으로 돌렸다. 지금은 첫 화면에 「체험 계정으로 입장」
+         버튼이 따로 있어서 그 우회가 필요 없고, 오히려 이 아이디를
+         전담교사 계정으로 쓰려는 선생님이 전교생을 못 보게 막았다.
+         이제 다른 계정과 똑같이 처리한다. */
       const prof=readTcProfile(r.user)||acct;
       if(applyTcProfile(prof)){
+        /* 아이디 체계상 학년 자리가 00 이면 전담교사다(예: 20260000).
+           예전에 저장해 둔 프로필이 이 계정을 담임으로 잡고 있으면
+           전교생 대신 한 반만 보이게 되므로, 아이디 쪽을 우선한다. */
+        if(acct&&acct.tcIsSpecial&&!S.tcIsSpecial){
+          S.tcIsSpecial=true; S.tcGrade=1; S.tcCls=1;
+        }
         if(acct&&acct.year)S.schoolYear=acct.year;
         /* ⚠️ 체험 계정에서 보던 '4학년 2반' 같은 범위가 남아 있으면
               선생님이 로그인해도 그 반만 보인다. 로그인할 때마다 지운다. */
