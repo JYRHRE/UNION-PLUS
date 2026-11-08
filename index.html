@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-08-02"/>
+<meta name="app-version" content="2026-11-08-04"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-08-02";
+const APP_VERSION = "2026-11-08-04";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -3035,7 +3035,7 @@ function hDiagSummary(s){
     o+='<td class="no-print" style="padding:11px 6px;text-align:center"><button class="rd-del" data-i="'+i+'" title="'+(i+1)+'회차 삭제" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">삭제</button></td></tr>';
   });
   o+='</table></div>';
-  o+='<div class="no-print" style="font-size:11px;color:var(--m);margin-top:9px;line-height:1.6">분석완료일을 실제 진단한 날짜로 고칠 수 있어요. 바꾸면 바로 저장되고, 회차 순서도 날짜에 맞춰 정리됩니다.</div>';
+  o+='<div class="no-print" style="font-size:11px;color:var(--m);margin-top:9px;line-height:1.6">분석완료일을 실제 진단한 날짜로 고칠 수 있어요. 바꾸면 바로 저장되고, 회차 순서도 날짜에 맞춰 정리됩니다.<br>가장 이른 회차의 날짜로 <strong>위의 등록일도 함께 맞춰집니다.</strong></div>';
   // 같은 날 같은 점수가 반복되면 실수로 여러 번 제출된 것이다
   const dupN=(()=>{const seen=new Set();let n=0;
     rows.forEach(r=>{const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
@@ -4183,7 +4183,7 @@ body+='<div id="sec-basic" class="sec-anchor"></div><div class="card" style="pad
 +'<select id="qk-stype" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
 +STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
 +'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
-+'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.</div></div>';
++'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.<br>아래에서 <strong>1회차 분석완료일</strong>을 고치면 등록일도 그 날짜에 자동으로 맞춰집니다.</div></div>';
 /* 화면을 내려가는 순서가 곧 일하는 순서가 되도록 배치한다.
    STEP 1 진단 → STEP 2 지원 → STEP 3 성장 → STEP 4 기록 */
 body+=hStepBar(1);
@@ -4852,6 +4852,23 @@ function pgAdmin(){
     body += '<div style="font-size:12px;color:var(--m);margin-bottom:14px;line-height:1.65">전체 학생 진단 결과를 CSV 파일로 저장해요.</div>';
     body += '<button id="btn-export-csv" style="padding:11px 20px;border-radius:12px;background:var(--g);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">📥 CSV로 내보내기</button></div>';
 
+    /* 연구 분석·보고서용으로 밖에 내보낼 때 쓰는 자료.
+       이름·담임을 빼고, 회차별 점수를 한 줄씩 펼쳐 담는다. */
+    body += '<div class="card">';
+    body += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="font-size:20px">📊</span>';
+    body += '<div><div style="font-size:14px;font-weight:800">분석용 익명 CSV</div>';
+    body += '<div style="font-size:11px;color:var(--m);margin-top:2px">연구 분석·보고서 작성용 · 외부로 보내도 되는 자료예요</div></div></div>';
+    body += '<div style="font-size:11.5px;color:var(--m);line-height:1.75;margin:10px 0 12px">';
+    body += '<strong style="color:var(--t)">이름·담임 실명이 들어가지 않습니다.</strong> 대신 <code style="background:var(--bg);padding:1px 5px;border-radius:4px">41-03</code> 같은 익명 번호를 붙여 1차·2차를 이어 봅니다.<br>';
+    body += '회차마다 한 줄씩이라 1차→2차 변화를 바로 셀 수 있고, 학년군·학생유형·이주배경 여부가 함께 들어갑니다.';
+    body += '</div>';
+    body += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    body += '<button id="btn-export-anon" style="padding:11px 20px;border-radius:12px;background:#4C6FE8;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">📊 분석용 익명 CSV 내려받기</button>';
+    body += '<button id="btn-data-check" style="padding:11px 18px;border-radius:12px;background:var(--s);color:var(--p);border:1.5px solid var(--b);font-size:13px;font-weight:700;cursor:pointer">🔍 데이터 점검</button>';
+    body += '</div>';
+    body += '<div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">「데이터 점검」은 화면마다 인원이 다르게 나올 때 어디서 갈리는지 알려줍니다.</div>';
+    body += '</div>';
+
     // ── 위험 구역 ──
     body += '<div class="card" style="border:1.5px solid #FFD0D0"><div style="font-size:14px;font-weight:700;color:var(--d);margin-bottom:8px">⚠️ 데이터 초기화</div>';
     body += '<div style="font-size:12px;color:var(--m);margin-bottom:14px;line-height:1.65">학생 데이터를 샘플 데이터로 되돌려요.</div>';
@@ -4880,6 +4897,13 @@ function roundsOf(s){
   const h=s&&s.scoreHistory;
   if(h&&h.length)return h;
   return (s&&s.scores)?[{date:s.at,scores:s.scores}]:[];
+}
+/* 진단 날짜를 고치면 등록일도 1회차 날짜에 맞춘다.
+   등록일이 8월인데 1회차가 4월이면 앞뒤가 안 맞아 보이므로,
+   가장 이른 진단일을 등록일로 삼는다. */
+function atFromHist(hist, fallback){
+  const d=(hist&&hist.length)?String(hist[0].date||"").slice(0,10):"";
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : fallback;
 }
 function pgRoundDate(){
   const{tcGrade,tcCls,tcIsSpecial}=S;
@@ -4983,6 +5007,26 @@ function pgRoundDate(){
   body+='<button id="rd-apply" style="width:100%;padding:12px 0;border-radius:11px;border:none;background:'+(selN?"var(--p)":"var(--b)")+';color:'+(selN?"#fff":"var(--m)")+';font-size:13.5px;font-weight:800;cursor:'+(selN?"pointer":"default")+'">'
     +(selN?("📅 "+selN+"명의 날짜 바꾸기"):"학생을 먼저 선택해 주세요")+'</button>';
   body+='</div>';
+
+  /* 등록일 맞추기 — 등록일이 1회차 진단일보다 늦게 찍혀 있으면
+     "8월에 등록한 학생을 4월에 진단했다"는 앞뒤 안 맞는 기록이 된다. */
+  {
+    const off=sl.filter(st=>{
+      const h=roundsOf(st); if(!h.length)return false;
+      const d=String(h[0].date||"").slice(0,10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(d) && d!==String(st.at||"").slice(0,10);
+    });
+    body+='<div class="card" style="margin-top:12px">';
+    body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:6px">등록일도 1회차 날짜에 맞추기</div>';
+    body+='<div style="font-size:11.5px;color:var(--m);line-height:1.7;margin-bottom:10px">'
+      +'등록일이 1회차 진단일보다 뒤에 찍혀 있으면 보고서에서 앞뒤가 맞지 않아 보여요. '
+      +'지금 이 범위에서 <strong style="color:'+(off.length?"#D18A0A":"var(--t)")+'">'+off.length+'명</strong>의 등록일이 1회차 날짜와 다릅니다.'
+      +(off.length?'<br>누르면 그 학생들의 등록일을 각자의 1회차 진단일로 바꿉니다. 점수·응답은 그대로예요.':'')
+      +'</div>';
+    body+='<button id="rd-syncat" style="width:100%;padding:11px 0;border-radius:11px;border:none;background:'+(off.length?"#4C6FE8":"var(--b)")+';color:'+(off.length?"#fff":"var(--m)")+';font-size:13px;font-weight:800;cursor:'+(off.length?"pointer":"default")+'">'
+      +(off.length?("🗓 "+off.length+"명의 등록일 맞추기"):"모두 맞춰져 있어요")+'</button>';
+    body+='</div>';
+  }
 
   body+='</div>';
   return hLayout(tcSidebar(),body);
@@ -5810,7 +5854,8 @@ function bindEv(){
         // 날짜를 바꿨으니 회차 순서를 다시 세운다
         hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
         n++;
-        return {...st, scoreHistory:hist, scores:hist.length?hist[hist.length-1].scores:st.scores};
+        return {...st, scoreHistory:hist, scores:hist.length?hist[hist.length-1].scores:st.scores,
+                at:atFromHist(hist,st.at)};
       });
       S.students=next; saveSt(next);
       set({students:next, rdSel:{}, roundTab:null});
@@ -5818,6 +5863,27 @@ function bindEv(){
       let fail=0;
       for(const id of ids){ const st=next.find(x=>x.id===id); if(st&&await dbSaveStudent(st)===false)fail++; }
       toast(fail?("⚠️ "+(n-fail)+"명 저장, "+fail+"명 실패"):("✅ "+n+"명 저장 완료"));
+      set({});
+    });
+    on("rd-syncat",async()=>{
+      const hit=[];
+      // 지금 보고 있는 범위(학년·반)의 학생만 손댄다
+      const ok={}; scopeStudents(S.tcIsSpecial?S.students:S.students.filter(x=>x.grade===S.tcGrade&&x.cls===S.tcCls))
+        .forEach(x=>ok[x.id]=true);
+      const next=S.students.map(st=>{
+        if(!ok[st.id])return st;
+        const h=roundsOf(st); if(!h.length)return st;
+        const d=atFromHist(h,null);
+        if(!d||d===String(st.at||"").slice(0,10))return st;
+        const us={...st, at:d}; hit.push(us); return us;
+      });
+      if(!hit.length){toast("이미 모두 맞춰져 있어요.");return;}
+      S.students=next; saveSt(next);
+      set({students:next});
+      toast("🗓 "+hit.length+"명의 등록일을 1회차 날짜로 맞췄어요. 서버에 올리는 중...");
+      let fail=0;
+      for(const st of hit){ if(await dbSaveStudent(st)===false)fail++; }
+      toast(fail?("⚠️ "+(hit.length-fail)+"명 저장, "+fail+"명 실패"):("✅ "+hit.length+"명 저장 완료"));
       set({});
     });
   }
@@ -6130,11 +6196,12 @@ function bindEv(){
         if(!hist[idx])return;
         hist[idx]={...hist[idx],date:el.value||hist[idx].date};
         hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
-        const us={...stu,scoreHistory:hist,scores:hist.length?hist[hist.length-1].scores:stu.scores};
+        const us={...stu,scoreHistory:hist,scores:hist.length?hist[hist.length-1].scores:stu.scores,
+                  at:atFromHist(hist,stu.at)};
         set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
         saveSt(S.students);
         dbSaveStudent(us);
-        toast("분석완료일을 "+(el.value||"-")+"(으)로 바꿨어요.");
+        toast("분석완료일을 "+(el.value||"-")+"(으)로 바꿨어요. 등록일도 1회차 날짜("+(us.at||"-")+")에 맞췄어요.");
       });
     });
     onA(".rd-del",e=>{
@@ -6596,6 +6663,76 @@ function bindEv(){
         const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="UNION진단결과_"+S.schoolYear+".csv";a.click();
         toast("📥 CSV 파일 다운로드됐어요!");
       });
+      /* 분석용 익명 CSV
+         외부(연구 분석·보고서 작성)로 내보내는 자료에는 이름·담임 실명을
+         넣지 않는다. 대신 학생마다 고정된 익명 번호를 붙여 회차 간
+         연결은 유지한다. 회차별 영역 점수를 한 줄씩 펼쳐 담아야
+         1차→2차 변화를 통계로 볼 수 있다. */
+      on("btn-export-anon",()=>{
+        const sl=S.students||[];
+        const done=sl.filter(s=>(s.scoreHistory||[]).length||s.scores);
+        if(!done.length){toast("진단 기록이 있는 학생이 없어요.");return;}
+        // 학년-반 안에서 번호를 매긴다 (이름 순서와 무관하게 고정되도록 id 기준 정렬)
+        const no={}; const byCls={};
+        sl.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).forEach(s=>{
+          const k=s.grade+"-"+s.cls; byCls[k]=(byCls[k]||0)+1;
+          no[s.id]=s.grade+""+String(s.cls)+"-"+String(byCls[k]).padStart(2,"0");
+        });
+        const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+        const header=["익명번호","학년","반","학년군","학생유형","이주배경여부",
+                      "회차","진단일","측정영역수",...SUBS,"총점","이전회차대비","지원건수","지원영역"].join(",");
+        const rows=[];
+        done.forEach(s=>{
+          const hist=(s.scoreHistory&&s.scoreHistory.length)?s.scoreHistory
+                     :(s.scores?[{date:s.at,scores:s.scores,measured:SUBS.slice()}]:[]);
+          const sp=s.supports||[];
+          const stype=s.stype||"일반학생";
+          // 학교가 관리하는 학생유형을 그대로 쓰고, 이주배경 여부만 파생해 둔다
+          const migrant=(stype==="일반학생")?"비이주배경":"이주배경";
+          let prev=null;
+          hist.forEach((h,i)=>{
+            const r=subScores(h.scores)||{};
+            const tot=totSc(h.scores);
+            const d=(prev==null)?"":(tot-prev);
+            prev=tot;
+            rows.push([no[s.id],s.grade,s.cls,gg(s.grade),stype,migrant,
+              (i+1),h.date||"",measuredOf(h).length,
+              ...SUBS.map(k=>Number(r[k])||0),tot,d,
+              sp.length, sp.map(x=>x.dom).filter((v,j,a)=>a.indexOf(v)===j).join("/")
+            ].map(q).join(","));
+          });
+        });
+        const csv="\uFEFF"+header+"\n"+rows.join("\n");
+        const a=document.createElement("a");
+        a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+        a.download="UNION_분석용_익명_"+S.schoolYear+"_"+td()+".csv";a.click();
+        toast("📊 익명 CSV "+rows.length+"행을 내려받았어요. 이름·담임은 들어있지 않아요.");
+      });
+
+      // 데이터 점검 — 화면마다 숫자가 다를 때 어디서 갈리는지 본다
+      on("btn-data-check",()=>{
+        const sl=S.students||[];
+        const withScores=sl.filter(s=>s.scores).length;
+        const withHist=sl.filter(s=>(s.scoreHistory||[]).length>0).length;
+        const histNoScore=sl.filter(s=>(s.scoreHistory||[]).length>0&&!s.scores).length;
+        const scoreNoHist=sl.filter(s=>s.scores&&!(s.scoreHistory||[]).length).length;
+        const emptySub=sl.filter(s=>s.scores&&!hasSub(s.scores)).length;
+        const dup=findDupGroups(sl);
+        const dupN=dup.reduce((a,g)=>a+g.length-1,0);
+        const rounds=sl.reduce((a,s)=>a+((s.scoreHistory||[]).length||(s.scores?1:0)),0);
+        const noDate=sl.reduce((a,s)=>a+((s.scoreHistory||[]).filter(h=>!h.date).length),0);
+        let m="누적 학생 "+sl.length+"명\n";
+        m+="· 최종 점수 있음 (진단 완료 집계) : "+withScores+"명\n";
+        m+="· 회차 기록 있음 (누적 진단 집계) : "+withHist+"명 / 총 "+rounds+"회\n";
+        m+="— 아래 숫자가 0이 아니면 화면마다 인원이 달라집니다 —\n";
+        m+="· 회차는 있는데 최종 점수가 비어 있음 : "+histNoScore+"명\n";
+        m+="· 최종 점수는 있는데 회차 기록이 없음 : "+scoreNoHist+"명\n";
+        m+="· 점수가 6개 영역 값이 아님(옛 형식) : "+emptySub+"명\n";
+        m+="· 같은 반 같은 이름 중복 : "+dupN+"건\n";
+        m+="· 날짜가 비어 있는 회차 : "+noDate+"회";
+        alert(m);
+      });
+
       // 데이터 초기화
       on("btn-reset-data",()=>{
         if(confirm("정말로 모든 학생 데이터를 초기화할까요? 되돌릴 수 없어요.")){
