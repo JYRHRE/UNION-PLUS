@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-08-04"/>
+<meta name="app-version" content="2026-11-09-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-08-04";
+const APP_VERSION = "2026-11-09-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1745,6 +1745,7 @@ async function flushPending(){
           at:String(s.at||td()),scores:s.scores||null,
           score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
           logs:Array.isArray(s.logs)?s.logs:[],supports:Array.isArray(s.supports)?s.supports:[],
+          append_only:(!isAuthed()&&!!s._fromServer),
           updated_at:new Date().toISOString()};
       const res = isAuthed()
         ? await fetch(SB_URL+"/rest/v1/students",{method:"POST",
@@ -1767,6 +1768,41 @@ const TOMB_KEY="union_deleted_v1";
 function loadTomb(){ try{return JSON.parse(localStorage.getItem(TOMB_KEY)||"[]");}catch(e){return [];} }
 function addTomb(id){ try{const a=loadTomb();if(a.indexOf(id)<0){a.push(id);localStorage.setItem(TOMB_KEY,JSON.stringify(a.slice(-300)));}}catch(e){} }
 function dropTomb(ids){ try{const keep=loadTomb().filter(x=>ids.indexOf(x)>=0);localStorage.setItem(TOMB_KEY,JSON.stringify(keep));}catch(e){} }
+
+/* ── 회차 합치기 ───────────────────────────────────────────
+   학생은 자기 기기에서 설문을 낸다. 그 기기에는 학교 명단이 없어서
+   (명단 조회는 교사 로그인이 있어야 한다) 아이디만 아는 '껍데기'가 만들어지고,
+   거기에는 1회차가 비어 있다. 그대로 저장되면 서버의 1회차가 지워진다.
+   그래서 아래 두 가지를 둔다.
+     · 회차 지움 표식 — 선생님이 일부러 지운 회차가 되살아나지 않게
+     · mergeHist     — 동기화할 때 서버와 이 기기의 회차를 합집합으로 */
+const RTOMB_KEY="union_rtomb_v1";
+function roundKey(r){
+  if(!r)return "";
+  return (r.date||"")+"|"+measuredOf(r).join("/")+"|"
+        +SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
+}
+function loadRTomb(){ try{return JSON.parse(localStorage.getItem(RTOMB_KEY)||"[]");}catch(e){return [];} }
+function addRTomb(sid,r){
+  try{
+    const k=String(sid)+"»"+roundKey(r);
+    const a=loadRTomb();
+    if(a.indexOf(k)<0){a.push(k);localStorage.setItem(RTOMB_KEY,JSON.stringify(a.slice(-500)));}
+  }catch(e){}
+}
+function mergeHist(sid, mine, theirs){
+  const tomb=loadRTomb();
+  const gone=k=>tomb.indexOf(String(sid)+"»"+k)>=0;
+  const out=[], seen={};
+  [...(theirs||[]), ...(mine||[])].forEach(r=>{
+    if(!r)return;
+    const k=roundKey(r);
+    if(gone(k)||seen[k])return;
+    seen[k]=1; out.push(r);
+  });
+  out.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+  return out;
+}
 
 async function dbDeleteStudent(id){
   // 다시 올라오지 않도록 대기열에서도 뺀다
@@ -1859,7 +1895,26 @@ async function syncFromDB(){
       const ids=sts.map(x=>x.id);
       dropTomb(ids);
       const filtered=migrateScales(tomb.length?sts.filter(x=>tomb.indexOf(x.id)<0):sts);
-      S.students = filtered; saveSt(filtered);
+      /* 서버 것으로 통째로 갈아끼우지 않는다.
+         학생이 자기 기기에서 낸 회차가 서버의 옛 회차를 덮어썼을 수 있는데,
+         그 옛 회차는 아직 이 기기에 남아 있다. 둘을 합쳐야 한 쪽도 잃지 않는다. */
+      const mineBy={}; (S.students||[]).forEach(x=>{ mineBy[String(x.id)]=x; });
+      const restore=[];
+      const merged=filtered.map(sv=>{
+        const mine=mineBy[String(sv.id)];
+        if(!mine)return sv;
+        const h=mergeHist(sv.id, mine.scoreHistory||[], sv.scoreHistory||[]);
+        const svN=(sv.scoreHistory||[]).length;
+        if(h.length===svN)return {...sv, scoreHistory:h};
+        const out={...sv, scoreHistory:h, scores:h.length?h[h.length-1].scores:sv.scores};
+        restore.push(out);          // 서버가 모르는 회차가 있다 — 되돌려 보낸다
+        return out;
+      });
+      S.students = merged; saveSt(merged);
+      if(restore.length){
+        try{console.log("[UNION+] 사라진 회차 "+restore.length+"명분을 되살려 서버로 보냅니다.");}catch(e){}
+        for(const s of restore){ await dbSaveStudent(s).catch(()=>{}); }
+      }
     }
     if(nts !== null){ S.notices = nts; saveNotices(nts); }
     if(res !== null){ S.resources = res; saveResources(res); }
@@ -6210,6 +6265,7 @@ function bindEv(){
       const hist=(stu.scoreHistory&&stu.scoreHistory.length)?stu.scoreHistory:(stu.scores?[{date:stu.at,scores:stu.scores}]:[]);
       if(!hist[idx])return;
       showDelModal("…"+(idx+1)+"회차 진단 기록을 삭제할까요?", ()=>{
+        addRTomb(sid, hist[idx]);          // 동기화 때 되살아나지 않게
         const left=hist.filter((_,i)=>i!==idx);
         const us={...stu, scoreHistory:left,
           scores: left.length?left[left.length-1].scores:null};
@@ -6225,6 +6281,7 @@ function bindEv(){
         hist.forEach(r=>{
           const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
           if(!seen.has(key)){seen.add(key);left.push(r);}
+          else addRTomb(sid, r);
         });
         const removed=hist.length-left.length;
         const us={...stu, scoreHistory:left,
