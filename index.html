@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-10-25-01"/>
+<meta name="app-version" content="2026-11-08-02"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -890,6 +890,7 @@ const S={
   focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0], fltState:"all",
   viewGrade:0, viewCls:0, acctEmail:"", demoMode:false, supOpenDom:null, progCat:"all",
   linkProg:"", linkSel:{}, linkStart:"2026-04-01", linkSes:8, linkStatus:"완료", linkMemo:"",
+  rdRound:1, rdDate:"2026-04-20", rdSel:{},
   rawOpen:false, rawTab:null, loginEmail:"", loggingIn:false, diag:null, diagRunning:false,
   bulkText:"", bulkGrade:1, bulkCls:1,
   fltDom:"all", fltCond:"all", teamOpen:false,
@@ -1087,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-10-25-01";
+const APP_VERSION = "2026-11-08-02";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1555,6 +1556,85 @@ async function dbLoadStudents(retry){
 // 학생은 명단을 읽을 수 없으므로, 이름·학년·반이 맞을 때
 // 학생 번호만 돌려주는 전용 통로로 물어본다.
 // 이게 없으면 기기를 바꿀 때마다 같은 아이가 새로 생긴다.
+/* ── 이름 비교용 열쇠 ──────────────────────────────────────
+   같은 학생인데 새 학생이 만들어지는 일이 잦았다. 눈으로는 같은
+   "구준회"인데 글자 코드가 달라서 === 비교가 어긋나기 때문이다.
+     · 맥·아이패드에서 친 한글은 자모가 분리된 형태(NFD)로 들어온다.
+       화면에는 똑같이 보이지만 PC에서 친 글자(NFC)와 다른 값이다.
+     · 붙여넣기한 명단에는 눈에 안 보이는 공백(nbsp, zero-width)이
+       섞여 들어오는 일이 있다.
+     · 이름 중간에 띄어쓰기를 넣는 아이도 있다.
+   그래서 비교할 때는 아래 열쇠로 맞춘다. 저장되는 이름 자체는
+   선생님이 적은 그대로 둔다. */
+function normName(v){
+  let t=String(v==null?"":v);
+  try{ t=t.normalize("NFC"); }catch(e){}
+  t=t.replace(/[\s\u00A0\u200B-\u200D\uFEFF]+/g,"");   // 모든 공백·보이지 않는 문자 제거
+  return t.toLowerCase();
+}
+// 같은 반 같은 이름인가
+const sameStudent=(a,g,c,b)=>normName(a)===normName(b&&b.name)&&Number(b&&b.grade)===Number(g)&&Number(b&&b.cls)===Number(c);
+/* ── 중복 학생 찾기·합치기 ─────────────────────────────────
+   같은 반 같은 이름이 둘 이상이면 같은 학생으로 본다.
+   합칠 때 진단 회차·관찰 기록·지원 내역을 모두 모으고,
+   같은 날 같은 점수는 한 번만 남긴다. */
+function findDupGroups(list){
+  const g={};
+  (list||[]).forEach(s=>{const k=stuKeyOf(s);(g[k]=g[k]||[]).push(s);});
+  return Object.values(g).filter(a=>a.length>1);
+}
+function runMergeDup(){
+  showDelModal("같은 학생으로 보이는 기록을 합칠까요? 진단 회차는 모두 보존됩니다.", async()=>{
+    const g={};
+    (S.students||[]).forEach(s=>{const k=stuKeyOf(s);(g[k]=g[k]||[]).push(s);});
+    const keep=[],drop=[];
+    Object.values(g).forEach(a=>{
+      if(a.length===1){keep.push(a[0]);return;}
+      // 가장 먼저 등록된 기록을 기준으로 삼는다
+      a.sort((x,y)=>String(x.at||"").localeCompare(String(y.at||"")));
+      const base=a[0];
+      let hist=[],logs=[],sups=[];
+      a.forEach(s=>{
+        hist=hist.concat((s.scoreHistory&&s.scoreHistory.length)?s.scoreHistory:(s.scores?[{date:s.at,scores:s.scores}]:[]));
+        logs=logs.concat(s.logs||[]);
+        sups=sups.concat(s.supports||[]);
+      });
+      // 같은 날 같은 점수는 한 번만
+      const seen=new Set(),h2=[];
+      hist.sort((x,y)=>String(x.date||"").localeCompare(String(y.date||"")));
+      hist.forEach(r=>{const k2=(r.date||"")+"|"+SUBS.map(k3=>(subScores(r.scores)||{})[k3]).join(",");
+        if(!seen.has(k2)){seen.add(k2);h2.push(r);}});
+      const seenL=new Set(),l2=[];
+      logs.forEach(l=>{const k2=(l.date||"")+"|"+(l.author||"")+"|"+(l.memo||"");
+        if(!seenL.has(k2)){seenL.add(k2);l2.push(l);}});
+      keep.push({...base,
+        // 비어 있지 않은 정보를 우선 살린다
+        teacher:a.map(s=>s.teacher).find(v=>v)||"",
+        country:a.map(s=>s.country).find(v=>v&&v!=="대한민국")||base.country||"대한민국",
+        stype:a.map(s=>s.stype).find(v=>v&&v!=="일반학생")||base.stype||"일반학생",
+        tcNote:a.map(s=>s.tcNote).find(v=>v)||"",
+        teamFb:a.map(s=>s.teamFb).find(v=>v)||null,
+        scoreHistory:h2, scores:h2.length?h2[h2.length-1].scores:null,
+        logs:l2, supports:sups});
+      a.slice(1).forEach(s=>drop.push(s.id));
+    });
+    set({students:keep});
+    saveSt(keep);
+    for(const s of keep)await dbSaveStudent(s).catch(()=>{});
+    for(const id of drop)await dbDeleteStudent(id).catch(()=>{});
+    toast("중복 "+drop.length+"건을 합쳤어요. 학생 "+keep.length+"명이 남았어요.");
+    set({});
+  });
+}
+
+// 명단에서 찾기
+function findStu(list,name,grade,cls){
+  return (list||[]).find(x=>sameStudent(name,grade,cls,x))||null;
+}
+// 같은 사람인지 가리는 열쇠 (반 + 이름)
+const stuKey=(name,grade,cls)=>Number(grade)+"|"+Number(cls)+"|"+normName(name);
+const stuKeyOf=s=>stuKey(s&&s.name,s&&s.grade,s&&s.cls);
+
 async function dbFindStudentId(name,grade,cls){
   if(!USE_DB())return null;
   try{
@@ -3761,7 +3841,7 @@ function pgBulkAdd(){
   const g=S.tcIsSpecial?(S.bulkGrade||(isDemoAcct()&&Number(S.viewGrade))||1):S.tcGrade;
   const c=S.tcIsSpecial?(S.bulkCls||(isDemoAcct()&&Number(S.viewCls))||1):S.tcCls;
   const parsed=S.bulkText?parseRoster(S.bulkText,g,c):null;
-  const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
+  const exist=new Set((S.students||[]).map(s=>stuKeyOf(s)));
 
   let body=hTopbar("학생 한 번에 등록",true)+'<div style="padding:16px 20px;max-width:720px">';
 
@@ -3787,8 +3867,8 @@ function pgBulkAdd(){
   body+='</div>';
 
   if(parsed){
-    const nw=parsed.rows.filter(r=>!exist.has(r.name+"|"+r.grade+"|"+r.cls));
-    const dup=parsed.rows.filter(r=>exist.has(r.name+"|"+r.grade+"|"+r.cls));
+    const nw=parsed.rows.filter(r=>!exist.has(stuKey(r.name,r.grade,r.cls)));
+    const dup=parsed.rows.filter(r=>exist.has(stuKey(r.name,r.grade,r.cls)));
     body+='<div class="card">';
     body+='<div style="font-size:13.5px;font-weight:800;margin-bottom:4px">읽어낸 명단 '+parsed.rows.length+'명</div>';
     body+='<div style="font-size:11.5px;color:var(--m);margin-bottom:13px">새로 등록 '+nw.length+'명'
@@ -3826,12 +3906,35 @@ function pgBulkAdd(){
 function pgSurveyList(){
   const{students:sl,tcGrade,tcCls,tcIsSpecial}=S;
   const my=scopeStudents(tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls));
-  let body=hTopbar("학생 성장관리",false,'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button><button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
+  let body=hTopbar("학생 성장관리",false,
+    '<button id="btn-rdate" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">📅 진단 날짜</button>'
+   +'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button>'
+   +'<button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
   body+='<div style="padding:16px 20px;max-width:900px">';
   body+=hScopeBar();
   body+='<div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:10px 13px;border-radius:12px;background:var(--pl)">'
     +'<span style="font-size:14px">🌱</span>'
     +'<span style="font-size:11.5px;color:var(--p);font-weight:700;line-height:1.5">학생 중심 탐색 — <strong>지금 어떤 학생을 먼저 살펴볼 것인가?</strong></span></div>';
+
+  /* 2회차 설문을 받다 보면 같은 아이가 두 명으로 나뉘어 있는 일이 생긴다.
+     관리자 화면까지 들어가야 알 수 있으면 놓치므로 명단 맨 위에서 알린다. */
+  {
+    const dg=findDupGroups(my);
+    if(dg.length){
+      const rounds=dg.reduce((n,a)=>n+a.reduce((m,x)=>m+((x.scoreHistory||[]).length||(x.scores?1:0)),0),0);
+      body+='<div class="card" style="border:1.5px solid #F5D48A;background:#FFFBF0;margin-bottom:12px">';
+      body+='<div style="font-size:13px;font-weight:800;color:#B8791A;margin-bottom:5px">⚠️ 같은 학생이 둘로 나뉘어 있어요 · '+dg.length+'명</div>';
+      body+='<div style="font-size:11.5px;color:#8A6414;line-height:1.7;margin-bottom:9px">'
+        +'합치면 진단 '+rounds+'회가 한 명에게 모이고 1차·2차 순서대로 정렬돼요. 관찰 기록과 지원 내역도 함께 모입니다.</div>';
+      dg.slice(0,6).forEach(a=>{
+        const rr=a.reduce((m,x)=>m+((x.scoreHistory||[]).length||(x.scores?1:0)),0);
+        body+='<div style="font-size:11.5px;color:#8A6414;margin-bottom:4px">· <strong>'+hcv(a[0].name)+'</strong> ('+a[0].grade+'-'+a[0].cls+') — '+a.length+'건으로 나뉨, 진단 '+rr+'회</div>';
+      });
+      if(dg.length>6)body+='<div style="font-size:11px;color:#8A6414;margin-bottom:4px">외 '+(dg.length-6)+'명</div>';
+      body+='<button id="btn-merge-dup2" style="margin-top:7px;padding:10px 18px;border-radius:11px;border:none;background:#F5A623;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">중복 학생 합치기</button>';
+      body+='</div>';
+    }
+  }
 
   // ── 상태별 요약 + 빠른 필터 ──
   // 목록을 열자마자 '누구를 먼저 봐야 하는지'가 보이게 한다.
@@ -4662,7 +4765,7 @@ function pgAdmin(){
     {
       const g={};
       (S.students||[]).forEach(s=>{
-        const k=String(s.name).trim()+"|"+s.grade+"|"+s.cls;
+        const k=stuKeyOf(s);
         (g[k]=g[k]||[]).push(s);
       });
       const dups=Object.values(g).filter(a=>a.length>1);
@@ -4768,6 +4871,123 @@ function pgAdmin(){
    ⚠️ 없는 일을 만들어 넣지 않는다. 실제로 참여한 학생만 체크한다.
       기록된 건은 '기존 참여 활동을 연계 기록'으로 남아, 나중에
       "진단을 보고 지원했다"고 잘못 읽히지 않는다. */
+/* ══ 진단 회차 날짜 한 번에 고치기 ═══════════════════════════
+   설문을 몰아서 입력하면 모든 회차가 입력한 날짜로 찍힌다.
+   실제로 진단한 날은 4~5월인데 기록은 10월로 남는 식이다.
+   학년·반을 골라 한 번에 바로잡는다. 점수는 건드리지 않고
+   날짜만 바꾸며, 바꾼 뒤 회차 순서를 날짜에 맞춰 다시 세운다. */
+function roundsOf(s){
+  const h=s&&s.scoreHistory;
+  if(h&&h.length)return h;
+  return (s&&s.scores)?[{date:s.at,scores:s.scores}]:[];
+}
+function pgRoundDate(){
+  const{tcGrade,tcCls,tcIsSpecial}=S;
+  const sl=scopeStudents(tcIsSpecial?S.students:S.students.filter(x=>x.grade===tcGrade&&x.cls===tcCls))
+    .slice().sort((a,b)=>(a.grade-b.grade)||(a.cls-b.cls)||String(a.name).localeCompare(String(b.name),"ko"));
+  const rn=Number(S.rdRound)||1;                 // 몇 회차를 고칠지 (1 = 1차)
+  const target=sl.filter(x=>roundsOf(x).length>=rn);
+  const sel=S.rdSel||{};
+  const selN=target.filter(x=>sel[x.id]).length;
+  const newDate=S.rdDate||"2026-04-20";
+
+  let body=hTopbar("진단 날짜 한 번에 고치기",true);
+  body+='<div style="padding:16px 20px;max-width:880px">';
+  body+='<div style="padding:12px 15px;border-radius:13px;background:#EDF1FF;border:1px solid #CBD6FF;margin-bottom:14px">';
+  body+='<div style="font-size:12.5px;font-weight:800;color:#2E4BA8;margin-bottom:5px">실제로 진단한 날짜로 바로잡는 화면이에요</div>';
+  body+='<div style="font-size:11px;color:#2E4BA8;line-height:1.75">설문을 몰아서 입력하면 모든 회차가 입력한 날로 찍힙니다. 여기서 학년·반을 골라 한 번에 고치세요.<br>'
+    +'<strong>점수와 응답은 그대로</strong>이고 날짜만 바뀝니다. 바꾼 뒤 회차 순서는 날짜에 맞춰 다시 정리됩니다.</div></div>';
+
+  body+=hScopeBar();
+
+  // ① 회차 고르기
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:9px">① 몇 회차를 고칠까요?</div>';
+  body+='<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  [1,2,3].forEach(n=>{
+    const cnt=sl.filter(x=>roundsOf(x).length>=n).length;
+    if(!cnt&&n>1)return;
+    const on=rn===n;
+    body+='<button class="rdrn" data-n="'+n+'" style="padding:8px 16px;border-radius:10px;font-size:12.5px;font-weight:800;cursor:pointer;'
+      +'border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?"var(--p)":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'
+      +n+'회차 <span style="font-weight:600;opacity:.8">'+cnt+'명</span></button>';
+  });
+  body+='</div></div>';
+
+  // ② 날짜 고르기
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:9px">② 어떤 날짜로 바꿀까요?</div>';
+  body+='<input id="rd-newdate" type="date" value="'+hcv(newDate)+'" min="2026-01-01" max="2026-12-31" '
+    +'style="width:100%;max-width:230px;padding:11px 13px;border-radius:10px;border:1.5px solid var(--b);font-size:14px;background:#fff;color:var(--t);outline:none;font-family:inherit;cursor:pointer"/>';
+  // 1회차는 보통 4~5월이라 자주 쓰는 날짜를 버튼으로 둔다
+  body+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">';
+  ["2026-04-06","2026-04-13","2026-04-20","2026-04-27","2026-05-11","2026-05-18","2026-05-25"].forEach(d=>{
+    const on=newDate===d, md=d.slice(5).replace("-","/");
+    body+='<button class="rdq" data-d="'+d+'" style="padding:6px 12px;border-radius:9px;font-size:11.5px;font-weight:700;cursor:pointer;'
+      +'border:1.5px solid '+(on?"transparent":"var(--b)")+';background:'+(on?"#4C6FE8":"var(--s)")+';color:'+(on?"#fff":"var(--m)")+'">'+md+'</button>';
+  });
+  body+='</div>';
+  body+='<div style="font-size:10.5px;color:var(--m);margin-top:8px;line-height:1.6">1회차는 보통 4~5월이에요. 자주 쓰는 날짜를 눌러 고르거나 위에서 직접 정하세요.</div>';
+  body+='</div>';
+
+  // ③ 대상 고르기
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+  body+='<span style="font-size:12.5px;font-weight:800">③ 어떤 학생을 고칠까요?</span>';
+  body+='<span id="rd-count" style="font-size:11px;font-weight:700;color:var(--p)">'+selN+'명 선택</span>';
+  body+='<span style="flex:1"></span>';
+  body+='<button id="rd-all" style="padding:5px 12px;border-radius:8px;border:1.5px solid var(--p);background:var(--pl);color:var(--p);font-size:11.5px;font-weight:800;cursor:pointer">전체 선택</button>';
+  body+='<button id="rd-none" style="padding:5px 11px;border-radius:8px;border:1px solid var(--b);background:var(--s);color:var(--m);font-size:11px;font-weight:700;cursor:pointer">해제</button>';
+  body+='</div>';
+
+  if(!target.length){
+    body+='<div style="padding:26px;text-align:center;color:var(--m);font-size:12.5px">이 범위에 '+rn+'회차 진단 기록이 있는 학생이 없어요.</div>';
+  }else{
+    let lastKey="";
+    body+='<div style="display:flex;flex-direction:column;gap:9px">';
+    target.forEach(st=>{
+      const key=st.grade+"-"+st.cls;
+      if(key!==lastKey){
+        lastKey=key;
+        const inCls=target.filter(x=>x.grade===st.grade&&x.cls===st.cls);
+        const onAll=inCls.every(x=>sel[x.id]);
+        body+='<div style="display:flex;align-items:center;gap:8px;margin-top:4px;padding-top:7px;border-top:1px dashed var(--b)">';
+        body+='<span style="font-size:11.5px;font-weight:800;color:var(--t)">'+st.grade+'학년 '+st.cls+'반</span>';
+        body+='<span style="font-size:10.5px;color:var(--m)">'+inCls.length+'명</span>';
+        // 반 단위로 한 번에 고르는 버튼 — 이게 있어야 클릭 몇 번에 끝난다
+        body+='<button class="rdcls" data-g="'+st.grade+'" data-c="'+st.cls+'" style="margin-left:auto;padding:4px 11px;border-radius:8px;border:1px solid '+(onAll?"var(--p)":"var(--b)")+';background:'+(onAll?"var(--pl)":"var(--s)")+';color:'+(onAll?"var(--p)":"var(--m)")+';font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap">'
+          +(onAll?"이 반 해제":"이 반 전체")+'</button></div>';
+        body+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:7px">';
+      }
+      const on=!!sel[st.id];
+      const cur=roundsOf(st)[rn-1];
+      const d=(cur&&cur.date)||"-";
+      const same=(d===newDate);
+      body+='<label style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:11px;cursor:pointer;'
+        +'border:1.5px solid '+(on?"var(--p)":"var(--b)")+';background:'+(on?"var(--pl)":"var(--s)")+'">';
+      body+='<input type="checkbox" class="rdck" data-id="'+st.id+'"'+(on?" checked":"")+' style="width:15px;height:15px;accent-color:var(--p);cursor:pointer;flex-shrink:0"/>';
+      body+='<span style="flex:1;min-width:0"><span style="display:block;font-size:12.5px;font-weight:700">'+hcv(st.name)+'</span>';
+      body+='<span style="display:block;font-size:10px;margin-top:1px;color:'+(same?"#0E8F68":"var(--m)")+'">'+hcv(d)+(same?" ✓":"")+'</span></span></label>';
+      // 반이 끝나면 닫기
+      const i=target.indexOf(st), nx=target[i+1];
+      if(!nx||((nx.grade+"-"+nx.cls)!==key))body+='</div>';
+    });
+    body+='</div>';
+  }
+  body+='</div>';
+
+  // ④ 적용
+  body+='<div class="card">';
+  body+='<div style="font-size:11.5px;color:var(--m);line-height:1.7;margin-bottom:10px">'
+    +'<strong style="color:var(--t)">'+selN+'명</strong>의 <strong style="color:var(--t)">'+rn+'회차</strong> 날짜를 <strong style="color:var(--p)">'+hcv(newDate)+'</strong>(으)로 바꿉니다.</div>';
+  body+='<button id="rd-apply" style="width:100%;padding:12px 0;border-radius:11px;border:none;background:'+(selN?"var(--p)":"var(--b)")+';color:'+(selN?"#fff":"var(--m)")+';font-size:13.5px;font-weight:800;cursor:'+(selN?"pointer":"default")+'">'
+    +(selN?("📅 "+selN+"명의 날짜 바꾸기"):"학생을 먼저 선택해 주세요")+'</button>';
+  body+='</div>';
+
+  body+='</div>';
+  return hLayout(tcSidebar(),body);
+}
+
 function pgSupLink(){
   const{tcGrade,tcCls,tcIsSpecial}=S;
   const sl=scopeStudents(tcIsSpecial?S.students:S.students.filter(s=>s.grade===tcGrade&&s.cls===tcCls))
@@ -5227,6 +5447,7 @@ function render(){
     else if(menu==="schoolView")    h=pgSchoolView();
     else if(menu==="support")       h=pgSupport();
     else if(menu==="supLink")       h=pgSupLink();
+    else if(menu==="roundDate")     h=pgRoundDate();
     else if(menu==="notice")        h=pgNotice();
     else if(menu==="resource")      h=pgResource();
     else if(menu==="admin")          h=isDemoMode()?pgSurveyList():pgAdmin();   // 체험 계정은 관리자 화면에 들어갈 수 없다
@@ -5450,19 +5671,35 @@ function bindEv(){
       if(!name){S.stuNameErr="이름을 입력해주세요.";render();setTimeout(()=>{const el=document.getElementById("stu-name");if(el)el.focus();},30);return;}
       const grade=S.stuGrade,cls=S.stuCls;
       if(!cls){toast("반을 선택해주세요.");return;}
-      // ① 이 기기에 이미 있나
-      let found=S.students.find(s=>String(s.name).trim()===name&&Number(s.grade)===grade&&Number(s.cls)===cls);
+      // ① 이 기기에 이미 있나 (글자 코드가 달라도 같은 이름으로 본다)
+      let found=findStu(S.students,name,grade,cls);
 
-      // ② 없으면 서버에 물어본다 (기기를 바꿔도 같은 사람으로 이어지도록)
+      // ② 없으면 서버를 찾아본다 (기기를 바꿔도 같은 사람으로 이어지도록)
       if(!found&&USE_DB()){
         const btn=document.getElementById("btn-stu-go");
         if(btn){btn.disabled=true;btn.textContent="확인하는 중...";}
-        const sid0=await dbFindStudentId(name,grade,cls);
+        let sid0=await dbFindStudentId(name,grade,cls);
+
+        /* 위 조회는 서버에 find_student 기능이 설치돼 있어야 한다.
+           없으면 조용히 빈손으로 돌아와 새 학생이 만들어졌다.
+           그래서 한 번 더 — 학교 명단을 통째로 받아 직접 찾는다. */
+        if(!sid0){
+          const all=await dbLoadStudents();
+          const hit=findStu(all,name,grade,cls);
+          if(hit){
+            // 받아온 학생을 이 기기 명단에도 넣어 둔다 (기록까지 그대로)
+            found=hit;
+            if(!findStu(S.students,name,grade,cls)){
+              S.students=[...S.students,hit]; saveSt(S.students);
+            }
+          }
+        }
         if(btn){btn.disabled=false;btn.textContent="설문 시작하기";}
-        if(sid0){
-          // 서버에 있던 학생 — 껍데기만 만들어 이어붙인다.
-          // 점수·기록은 읽을 수 없으므로 제출할 때 서버에서 합쳐진다.
-          found={id:sid0,name,grade,cls,teacher:"",country:"대한민국",stype:"일반학생",
+
+        if(!found&&sid0){
+          // 아이디만 알아낸 경우 — 껍데기를 만들어 이어붙인다.
+          // 점수·기록은 제출할 때 서버에서 합쳐진다.
+          found={id:sid0,name,grade,cls,teacher:homeroomOf(grade,cls),country:"대한민국",stype:"일반학생",
                  at:td(),scores:null,scoreHistory:[],logs:[],supports:[],_fromServer:true};
           S.students=[...S.students,found];saveSt(S.students);
         }
@@ -5525,6 +5762,66 @@ function bindEv(){
   }
 
   // ── 교사 설문관리 ──
+  // ── 진단 날짜 한 번에 고치기 ──
+  if(page==="teacher"&&menu==="roundDate"){
+    const roundsOfS=x=>roundsOf(x);
+    const inScope=()=>scopeStudents(S.tcIsSpecial?S.students:S.students.filter(x=>x.grade===S.tcGrade&&x.cls===S.tcCls))
+      .filter(x=>roundsOfS(x).length>=(Number(S.rdRound)||1));
+    const refresh=()=>{
+      const n=Object.keys(S.rdSel||{}).filter(k=>S.rdSel[k]).length;
+      const c=document.getElementById("rd-count"); if(c)c.textContent=n+"명 선택";
+      const b=document.getElementById("rd-apply");
+      if(b){b.textContent=n?("📅 "+n+"명의 날짜 바꾸기"):"학생을 먼저 선택해 주세요";
+        b.style.background=n?"var(--p)":"var(--b)";b.style.color=n?"#fff":"var(--m)";b.style.cursor=n?"pointer":"default";}
+    };
+    onA(".rdrn",e=>set({rdRound:Number(e.currentTarget.dataset.n)||1, rdSel:{}}));
+    onA(".rdq",e=>set({rdDate:e.currentTarget.dataset.d}));
+    const dn=document.getElementById("rd-newdate");
+    if(dn)dn.addEventListener("change",()=>set({rdDate:dn.value}));
+    document.querySelectorAll(".rdck").forEach(el=>el.addEventListener("change",e=>{
+      const id=e.currentTarget.dataset.id;
+      const nx={...(S.rdSel||{})}; nx[id]=e.currentTarget.checked; S.rdSel=nx;
+      const lab=e.currentTarget.closest("label");
+      if(lab){lab.style.borderColor=nx[id]?"var(--p)":"var(--b)";lab.style.background=nx[id]?"var(--pl)":"var(--s)";}
+      refresh();
+    }));
+    on("rd-all",()=>{const nx={};inScope().forEach(x=>nx[x.id]=true);set({rdSel:nx});});
+    on("rd-none",()=>set({rdSel:{}}));
+    // 반 단위로 한 번에 — 클릭 몇 번으로 끝나게 하는 핵심
+    onA(".rdcls",e=>{
+      const g=Number(e.currentTarget.dataset.g), c=Number(e.currentTarget.dataset.c);
+      const cls=inScope().filter(x=>Number(x.grade)===g&&Number(x.cls)===c);
+      const onAll=cls.every(x=>(S.rdSel||{})[x.id]);
+      const nx={...(S.rdSel||{})};
+      cls.forEach(x=>{ if(onAll)delete nx[x.id]; else nx[x.id]=true; });
+      set({rdSel:nx});
+    });
+    on("rd-apply",async()=>{
+      const sel=S.rdSel||{}, ids=Object.keys(sel).filter(k=>sel[k]);
+      if(!ids.length){toast("학생을 먼저 골라 주세요.");return;}
+      const rn=Number(S.rdRound)||1, nd=S.rdDate||"";
+      if(!nd){toast("날짜를 골라 주세요.");return;}
+      let n=0;
+      const next=S.students.map(st=>{
+        if(ids.indexOf(st.id)<0)return st;
+        const hist=roundsOf(st).slice();
+        if(!hist[rn-1])return st;
+        hist[rn-1]={...hist[rn-1], date:nd};
+        // 날짜를 바꿨으니 회차 순서를 다시 세운다
+        hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+        n++;
+        return {...st, scoreHistory:hist, scores:hist.length?hist[hist.length-1].scores:st.scores};
+      });
+      S.students=next; saveSt(next);
+      set({students:next, rdSel:{}, roundTab:null});
+      toast("📅 "+n+"명의 "+rn+"회차 날짜를 "+nd+"(으)로 바꿨어요. 서버에 올리는 중...");
+      let fail=0;
+      for(const id of ids){ const st=next.find(x=>x.id===id); if(st&&await dbSaveStudent(st)===false)fail++; }
+      toast(fail?("⚠️ "+(n-fail)+"명 저장, "+fail+"명 실패"):("✅ "+n+"명 저장 완료"));
+      set({});
+    });
+  }
+
   // ── 활동 참여 이력 연계 ──
   if(page==="teacher"&&menu==="supLink"){
     const g=id=>{const e=document.getElementById(id);return e?e.value.trim():"";};
@@ -5623,6 +5920,8 @@ function bindEv(){
     });
     on("btn-bulk",()=>set({menu:"bulkAdd",bulkText:""}));
     on("btn-bulk2",()=>set({menu:"bulkAdd",bulkText:""}));
+    on("btn-merge-dup2",()=>runMergeDup());
+    on("btn-rdate",()=>set({menu:"roundDate",rdSel:{},rdRound:1}));
     onA(".stflt",e=>{
       const k=e.currentTarget.dataset.k;
       set({fltState:(S.fltState||"all")===k?"all":k});   // 같은 걸 다시 누르면 해제
@@ -5646,8 +5945,8 @@ function bindEv(){
       const g=S.tcIsSpecial?(S.bulkGrade||1):S.tcGrade;
       const c=S.tcIsSpecial?(S.bulkCls||1):S.tcCls;
       const {rows}=parseRoster(S.bulkText,g,c);
-      const exist=new Set((S.students||[]).map(s=>String(s.name).trim()+"|"+s.grade+"|"+s.cls));
-      const add=rows.filter(r=>!exist.has(r.name+"|"+r.grade+"|"+r.cls))
+      const exist=new Set((S.students||[]).map(s=>stuKeyOf(s)));
+      const add=rows.filter(r=>!exist.has(stuKey(r.name,r.grade,r.cls)))
         .map(r=>({id:uid(),name:r.name,grade:r.grade,cls:r.cls,teacher:homeroomOf(r.grade,r.cls)||S.tcName||"",
           country:r.country,stype:r.stype,at:td(),scores:null,scoreHistory:[],logs:[],supports:[]}));
       if(!add.length){toast("새로 등록할 학생이 없어요.");return;}
@@ -6226,49 +6525,7 @@ function bindEv(){
           rd.readAsText(file);
         });
       }
-      on("btn-merge-dup",()=>{
-        showDelModal("…같은 학생으로 보이는 기록을 합칠까요? 진단 회차는 모두 보존됩니다.", async()=>{
-          const g={};
-          (S.students||[]).forEach(s=>{const k=String(s.name).trim()+"|"+s.grade+"|"+s.cls;(g[k]=g[k]||[]).push(s);});
-          const keep=[],drop=[];
-          Object.values(g).forEach(a=>{
-            if(a.length===1){keep.push(a[0]);return;}
-            // 가장 먼저 등록된 기록을 기준으로 삼는다
-            a.sort((x,y)=>String(x.at||"").localeCompare(String(y.at||"")));
-            const base=a[0];
-            let hist=[],logs=[],sups=[];
-            a.forEach(s=>{
-              hist=hist.concat((s.scoreHistory&&s.scoreHistory.length)?s.scoreHistory:(s.scores?[{date:s.at,scores:s.scores}]:[]));
-              logs=logs.concat(s.logs||[]);
-              sups=sups.concat(s.supports||[]);
-            });
-            // 같은 날 같은 점수는 한 번만
-            const seen=new Set(),h2=[];
-            hist.sort((x,y)=>String(x.date||"").localeCompare(String(y.date||"")));
-            hist.forEach(r=>{const k2=(r.date||"")+"|"+SUBS.map(k3=>(subScores(r.scores)||{})[k3]).join(",");
-              if(!seen.has(k2)){seen.add(k2);h2.push(r);}});
-            const seenL=new Set(),l2=[];
-            logs.forEach(l=>{const k2=(l.date||"")+"|"+(l.author||"")+"|"+(l.memo||"");
-              if(!seenL.has(k2)){seenL.add(k2);l2.push(l);}});
-            keep.push({...base,
-              // 비어 있지 않은 정보를 우선 살린다
-              teacher:a.map(s=>s.teacher).find(v=>v)||"",
-              country:a.map(s=>s.country).find(v=>v&&v!=="대한민국")||base.country||"대한민국",
-              stype:a.map(s=>s.stype).find(v=>v&&v!=="일반학생")||base.stype||"일반학생",
-              tcNote:a.map(s=>s.tcNote).find(v=>v)||"",
-              teamFb:a.map(s=>s.teamFb).find(v=>v)||null,
-              scoreHistory:h2, scores:h2.length?h2[h2.length-1].scores:null,
-              logs:l2, supports:sups});
-            a.slice(1).forEach(s=>drop.push(s.id));
-          });
-          set({students:keep});
-          saveSt(keep);
-          for(const s of keep)await dbSaveStudent(s).catch(()=>{});
-          for(const id of drop)await dbDeleteStudent(id).catch(()=>{});
-          toast("중복 "+drop.length+"건을 합쳤어요. 학생 "+keep.length+"명이 남았어요.");
-          set({});
-        });
-      });
+      on("btn-merge-dup",()=>runMergeDup());
       on("btn-flush",async()=>{
         toast("다시 보내는 중...");
         const r=await flushPending();
