@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-09-01"/>
+<meta name="app-version" content="2026-11-13-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-09-01";
+const APP_VERSION = "2026-11-13-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -3963,6 +3963,7 @@ function pgSurveyList(){
   const my=scopeStudents(tcIsSpecial?sl:sl.filter(s=>s.grade===tcGrade&&s.cls===tcCls));
   let body=hTopbar("학생 성장관리",false,
     '<button id="btn-rdate" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">📅 진단 날짜</button>'
+    +'<button id="btn-rcheck" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">🧾 회차 점검표</button>'
    +'<button id="btn-bulk" style="background:var(--s);color:var(--p);border:1px solid var(--b);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">한 번에 등록</button>'
    +'<button id="btn-add" style="background:var(--p);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 학생 등록</button>');
   body+='<div style="padding:16px 20px;max-width:900px">';
@@ -4960,6 +4961,68 @@ function atFromHist(hist, fallback){
   const d=(hist&&hist.length)?String(hist[0].date||"").slice(0,10):"";
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : fallback;
 }
+/* 회차 점검표 — 누가 몇 회차까지 기록됐는지 한 화면에서 본다.
+   2회차가 어떤 아이는 되고 어떤 아이는 안 될 때, 어디서 끊겼는지 눈으로 찾으라고 만든 화면. */
+function pgRoundCheck(){
+  const sl=scopeStudents(S.tcIsSpecial?S.students:S.students.filter(x=>x.grade===S.tcGrade&&x.cls===S.tcCls));
+  const n1=sl.filter(s=>roundsOf(s).length<=1).length;
+  const n2=sl.filter(s=>roundsOf(s).length===2).length;
+  const n3=sl.filter(s=>roundsOf(s).length>=3).length;
+  const only=S.rcOnly;
+
+  let body='<div style="max-width:760px;margin:0 auto">';
+  body+='<button id="rc-back" style="background:none;border:none;color:var(--m);font-size:13px;cursor:pointer;padding:0;margin-bottom:10px">← 돌아가기</button>';
+  body+='<div style="font-size:19px;font-weight:800;margin-bottom:4px">🧾 회차 점검표</div>';
+  body+='<div style="font-size:12.5px;color:var(--m);margin-bottom:14px">학생마다 몇 회차까지 저장돼 있는지 보여줍니다. 2회차가 비어 있는 학생을 찾을 때 쓰세요.</div>';
+
+  body+='<div class="card" style="display:flex;gap:10px;text-align:center;margin-bottom:12px">';
+  [["1회차뿐",n1,"#E8445A"],["2회차",n2,"#0E8F68"],["3회차 이상",n3,"#4C6FE8"]].forEach(([lb,v,c])=>{
+    body+='<div style="flex:1"><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div>'
+       +'<div style="font-size:11.5px;color:var(--m)">'+lb+'</div></div>';
+  });
+  body+='</div>';
+
+  body+='<div class="card" style="margin-bottom:12px">';
+  body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:6px">서버와 회차 합치기</div>';
+  body+='<div style="font-size:11.5px;color:var(--m);line-height:1.7;margin-bottom:10px">'
+    +'학생이 자기 기기에서 낸 회차가 서버의 옛 회차를 덮어썼을 수 있어요. '
+    +'이 기기에 남아 있는 회차와 서버 회차를 합쳐서 양쪽 모두 되살립니다. 일부러 지운 회차는 되살아나지 않습니다.</div>';
+  body+='<button id="rc-sync" style="width:100%;padding:11px 0;border-radius:11px;border:none;background:#4C6FE8;color:#fff;font-size:13px;font-weight:800;cursor:pointer">⟳ 서버와 회차 합치기</button>';
+  body+='</div>';
+
+  body+='<div style="display:flex;gap:8px;margin-bottom:10px">';
+  body+='<button class="rcf" data-k="" style="padding:7px 14px;border-radius:999px;border:1.5px solid '+(only?"var(--b)":"#4C6FE8")+';background:'+(only?"#fff":"#4C6FE8")+';color:'+(only?"var(--m)":"#fff")+';font-size:12px;font-weight:700;cursor:pointer">전체 '+sl.length+'명</button>';
+  body+='<button class="rcf" data-k="1" style="padding:7px 14px;border-radius:999px;border:1.5px solid '+(only?"#E8445A":"var(--b)")+';background:'+(only?"#E8445A":"#fff")+';color:'+(only?"#fff":"var(--m)")+';font-size:12px;font-weight:700;cursor:pointer">1회차뿐 '+n1+'명</button>';
+  body+='</div>';
+
+  const by={};
+  sl.forEach(s=>{ const k=s.grade+"|"+s.cls; (by[k]=by[k]||[]).push(s); });
+  Object.keys(by).sort((a,b)=>{const[x1,y1]=a.split("|").map(Number),[x2,y2]=b.split("|").map(Number);return x1-x2||y1-y2;})
+  .forEach(k=>{
+    const [g,c]=k.split("|");
+    let rows=by[k].slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    if(only) rows=rows.filter(s=>roundsOf(s).length<=1);
+    if(!rows.length)return;
+    body+='<div class="card" style="margin-bottom:10px">';
+    body+='<div style="font-size:13px;font-weight:800;margin-bottom:8px">'+g+'학년 '+c+'반 <span style="font-weight:600;color:var(--m);font-size:11.5px">· '+rows.length+'명</span></div>';
+    rows.forEach(s=>{
+      const h=roundsOf(s), nn=h.length;
+      const col = nn<=1 ? "#E8445A" : (nn===2?"#0E8F68":"#4C6FE8");
+      const dates=h.map(r=>String(r.date||"?").slice(5)).join(" → ")||"기록 없음";
+      body+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--b)">';
+      body+='<div style="width:74px;font-size:12.5px;font-weight:700">'+hcv(s.name||"")+'</div>';
+      body+='<div style="width:54px;font-size:12px;font-weight:800;color:'+col+'">'+nn+'회차</div>';
+      body+='<div style="flex:1;font-size:11.5px;color:var(--m)">'+hcv(dates)+'</div>';
+      body+='<button class="rcgo" data-id="'+s.id+'" style="padding:5px 10px;border-radius:9px;border:1px solid var(--b);background:#fff;color:var(--m);font-size:11px;font-weight:700;cursor:pointer">열기</button>';
+      body+='</div>';
+    });
+    body+='</div>';
+  });
+
+  body+='</div>';
+  return hLayout(tcSidebar(),body);
+}
+
 function pgRoundDate(){
   const{tcGrade,tcCls,tcIsSpecial}=S;
   const sl=scopeStudents(tcIsSpecial?S.students:S.students.filter(x=>x.grade===tcGrade&&x.cls===tcCls))
@@ -5547,6 +5610,7 @@ function render(){
     else if(menu==="support")       h=pgSupport();
     else if(menu==="supLink")       h=pgSupLink();
     else if(menu==="roundDate")     h=pgRoundDate();
+    else if(menu==="roundCheck")    h=pgRoundCheck();
     else if(menu==="notice")        h=pgNotice();
     else if(menu==="resource")      h=pgResource();
     else if(menu==="admin")          h=isDemoMode()?pgSurveyList():pgAdmin();   // 체험 계정은 관리자 화면에 들어갈 수 없다
@@ -5862,6 +5926,22 @@ function bindEv(){
 
   // ── 교사 설문관리 ──
   // ── 진단 날짜 한 번에 고치기 ──
+  if(page==="teacher"&&menu==="roundCheck"){
+    on("rc-back",()=>set({menu:"survey"}));
+    onA(".rcf",e=>set({rcOnly:!!e.currentTarget.dataset.k}));
+    onA(".rcgo",e=>set({sid:e.currentTarget.dataset.id,menu:"detail",
+      lAuth:S.tcIsSpecial?"전담교사":"담임교사",lTags:[],lMemo:"",neisText:""}));
+    on("rc-sync",async()=>{
+      if(!USE_DB()){toast("체험 계정에서는 서버와 합칠 수 없어요.");return;}
+      const before=(S.students||[]).reduce((a,x)=>a+roundsOf(x).length,0);
+      toast("서버와 합치는 중...");
+      await syncFromDB().catch(()=>{});
+      const after=(S.students||[]).reduce((a,x)=>a+roundsOf(x).length,0);
+      const d=after-before;
+      toast(d>0 ? ("✅ 회차 "+d+"건을 되살렸어요.") : "합쳤어요. 새로 되살릴 회차는 없었어요.");
+      set({});
+    });
+  }
   if(page==="teacher"&&menu==="roundDate"){
     const roundsOfS=x=>roundsOf(x);
     const inScope=()=>scopeStudents(S.tcIsSpecial?S.students:S.students.filter(x=>x.grade===S.tcGrade&&x.cls===S.tcCls))
@@ -6043,6 +6123,7 @@ function bindEv(){
     on("btn-bulk2",()=>set({menu:"bulkAdd",bulkText:""}));
     on("btn-merge-dup2",()=>runMergeDup());
     on("btn-rdate",()=>set({menu:"roundDate",rdSel:{},rdRound:1}));
+    on("btn-rcheck",()=>set({menu:"roundCheck",rcOnly:false}));
     onA(".stflt",e=>{
       const k=e.currentTarget.dataset.k;
       set({fltState:(S.fltState||"all")===k?"all":k});   // 같은 걸 다시 누르면 해제
