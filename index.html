@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-13-04"/>
+<meta name="app-version" content="2026-11-13-05"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-13-04";
+const APP_VERSION = "2026-11-13-05";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -4986,6 +4986,22 @@ function totalOf(sc){
 }
 /* 잇따라 있으면서 점수가 완전히 같은 회차 묶음을 찾는다.
    떨어져 있는 회차는 건드리지 않는다 — 진짜로 점수가 돌아온 경우일 수 있다. */
+/* 8월에 한 벌 더 들어간 회차를 찾는다.
+   ⚠️ 4학년 1반·6학년 1반은 진짜 8월에 1차를 했다. 그 학생들은 8월이 유일한 기록이므로
+   "봄(4~5월) 회차가 따로 있는 학생"만 대상으로 삼는다. */
+const monOf = r => String(r&&r.date||"").slice(0,7);
+function augDupIdx(s){
+  const h=roundsOf(s);
+  if(!h.some(r=>/^2026-0[45]$/.test(monOf(r)))) return [];   // 봄 기록이 없으면 손대지 않는다
+  return h.map((r,i)=>monOf(r)==="2026-08"?i:-1).filter(i=>i>=0);
+}
+function augOnlyCount(list){
+  return (list||[]).filter(s=>{
+    const h=roundsOf(s);
+    return h.some(r=>monOf(r)==="2026-08") && !h.some(r=>/^2026-0[45]$/.test(monOf(r)));
+  }).length;
+}
+
 function sameScoreRuns(s){
   const h=roundsOf(s); const out=[]; let cur=[0];
   for(let i=1;i<h.length;i++){
@@ -5053,6 +5069,33 @@ function pgRoundCheck(){
       if(hits.length>12)body+='<div style="font-size:11px;color:var(--m);padding-top:4px">… 외 '+(hits.length-12)+'명</div>';
       body+='</div>';
       body+='<button id="rc-samedup" style="width:100%;padding:11px 0;border-radius:11px;border:none;background:#F5A623;color:#fff;font-size:13px;font-weight:800;cursor:pointer">🧹 '+nDrop+'건 정리하기</button>';
+    }
+    body+='</div>';
+  }
+
+  /* 8월 중복 회차 지우기 */
+  {
+    const hits=[]; let nDrop=0;
+    sl.forEach(s=>{ const ix=augDupIdx(s); if(ix.length){hits.push({s,ix}); nDrop+=ix.length;} });
+    const keepN=augOnlyCount(sl);
+    body+='<div class="card" style="margin-bottom:12px'+(nDrop?';border:1.5px solid #F5D48A;background:#FFFBF0':'')+'">';
+    body+='<div style="font-size:12.5px;font-weight:800;margin-bottom:6px'+(nDrop?';color:#B8791A':'')+'">'+(nDrop?'⚠️ ':'')+'8월에 한 벌 더 들어간 회차 지우기</div>';
+    body+='<div style="font-size:11.5px;color:'+(nDrop?'#8A6414':'var(--m)')+';line-height:1.7;margin-bottom:10px">'
+      +'<strong>봄(4~5월) 회차가 따로 있는 학생</strong>만 골라 8월 회차를 지웁니다.'
+      +(nDrop?('<br>지금 <strong>'+hits.length+'명 · '+nDrop+'건</strong>이 해당됩니다.'):'<br>해당되는 회차가 없습니다.')
+      +(keepN?('<br><strong style="color:#0E8F68">8월이 진짜 1차인 '+keepN+'명(4학년 1반·6학년 1반)은 그대로 둡니다.</strong>'):'')
+      +'</div>';
+    if(nDrop){
+      body+='<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:10px;max-height:160px;overflow:auto">';
+      hits.slice(0,10).forEach(({s,ix})=>{
+        const h=roundsOf(s);
+        const left=h.filter((_,i)=>ix.indexOf(i)<0).map(r=>String(r.date||"?").slice(5)).join(", ");
+        body+='<div style="font-size:11.5px;color:#8A6414;padding:3px 0"><strong>'+hcv(s.name||"")+'</strong> · '
+          +hcv(ix.map(i=>String(h[i].date||"?").slice(5)).join(", "))+' 지움 → 남는 회차: '+hcv(left||"없음")+'</div>';
+      });
+      if(hits.length>10)body+='<div style="font-size:11px;color:var(--m);padding-top:4px">… 외 '+(hits.length-10)+'명</div>';
+      body+='</div>';
+      body+='<button id="rc-augdel" style="width:100%;padding:11px 0;border-radius:11px;border:none;background:#E8445A;color:#fff;font-size:13px;font-weight:800;cursor:pointer">🗑 8월 회차 '+nDrop+'건 지우기</button>';
     }
     body+='</div>';
   }
@@ -5998,6 +6041,27 @@ function bindEv(){
     onA(".rcf",e=>set({rcOnly:!!e.currentTarget.dataset.k}));
     onA(".rcgo",e=>set({sid:e.currentTarget.dataset.id,menu:"detail",
       lAuth:S.tcIsSpecial?"전담교사":"담임교사",lTags:[],lMemo:"",neisText:""}));
+    on("rc-augdel",()=>{
+      showDelModal("봄 회차가 따로 있는 학생의 8월 회차를 지울까요?\n8월이 1차인 4학년 1반·6학년 1반은 그대로 둡니다.",async()=>{
+        const touched=[]; let dropped=0;
+        const next=S.students.map(st=>{
+          const ix=augDupIdx(st); if(!ix.length)return st;
+          const h=roundsOf(st);
+          ix.forEach(i=>{addRTomb(st.id,h[i]);dropped++;});
+          const left=h.filter((_,i)=>ix.indexOf(i)<0);
+          if(!left.length)return st;                       // 다 지워질 일은 없지만, 만일을 대비
+          const out={...st,scoreHistory:left,scores:left[left.length-1].scores,at:atFromHist(left,st.at)};
+          touched.push(out); return out;
+        });
+        if(!dropped){toast("지울 8월 회차가 없어요.");return;}
+        S.students=next; saveSt(next); set({students:next});
+        toast("🗑 8월 회차 "+dropped+"건을 지웠어요. 서버에 반영하는 중...");
+        let fail=0;
+        for(const st of touched){ if(await dbSaveStudent(st)===false)fail++; }
+        toast(fail?("⚠️ "+(touched.length-fail)+"명 저장, "+fail+"명 실패"):("✅ "+touched.length+"명 저장 완료"));
+        set({});
+      });
+    });
     on("rc-samedup",()=>{
       showDelModal("같은 점수로 두 번 들어간 회차를 정리할까요?\n이른 날짜만 남고 나머지는 지워집니다.",async()=>{
         const touched=[]; let dropped=0;
