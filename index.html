@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-14-02"/>
+<meta name="app-version" content="2026-11-15-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-14-02";
+const APP_VERSION = "2026-11-15-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -7031,7 +7031,8 @@ function bindEv(){
         });
         const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
         const header=["익명번호","학년","반","학년군","학생유형","이주배경여부",
-                      "회차","진단일","측정영역수",...SUBS,"총점","이전회차대비","지원건수","지원영역"].join(",");
+                      "회차","진단일","측정영역수",...SUBS,"총점","이전회차대비","지원건수","지원영역",
+                      "응답자","문항응답","수정문항수","응답언어"].join(",");
         const rows=[];
         done.forEach(s=>{
           const hist=(s.scoreHistory&&s.scoreHistory.length)?s.scoreHistory
@@ -7049,7 +7050,10 @@ function bindEv(){
             rows.push([no[s.id],s.grade,s.cls,gg(s.grade),stype,migrant,
               (i+1),h.date||"",measuredOf(h).length,
               ...SUBS.map(k=>Number(r[k])||0),tot,d,
-              sp.length, sp.map(x=>x.dom).filter((v,j,a)=>a.indexOf(v)===j).join("/")
+              sp.length, sp.map(x=>x.dom).filter((v,j,a)=>a.indexOf(v)===j).join("/"),
+              // 검증용 — 이 회차가 어떻게 들어왔는지
+              h.by||"", (h.ans&&Object.keys(h.ans).length)?"있음":"없음",
+              (h.edits||[]).length, h.lang||""
             ].map(q).join(","));
           });
         });
