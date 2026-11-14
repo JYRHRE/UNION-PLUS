@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-13-06"/>
+<meta name="app-version" content="2026-11-14-02"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -887,7 +887,7 @@ const S={
   pwErr:false, pwChange:null,
   msg:"", neisText:"", neisCh:300,
   coaches:loadCoach(), coachSel:"basic", coachEdit:null,
-  focusDoms:null, roundTab:null, supOpen:false, supDom:SUBS[0], fltState:"all",
+  focusDoms:null, roundTab:null, rawEdit:false, supOpen:false, supDom:SUBS[0], fltState:"all",
   viewGrade:0, viewCls:0, acctEmail:"", demoMode:false, supOpenDom:null, progCat:"all",
   linkProg:"", linkSel:{}, linkStart:"2026-04-01", linkSes:8, linkStatus:"완료", linkMemo:"",
   rdRound:1, rdDate:"2026-04-20", rdSel:{},
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-13-06";
+const APP_VERSION = "2026-11-14-02";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -2206,8 +2206,24 @@ function hRawAnswers(s){
   o+='</div>';
   const cur=rows[sel].r;
   const qs=getQsLang(s.grade,cur.lang||"ko");
-  const LK=["","전혀 아니다","아니다","보통","그렇다","매우 그렇다"];
-  o+='<div style="font-size:11px;color:var(--m);margin-bottom:10px">'+hcv(cur.date||"-")+' · 응답자 '+hcv(cur.by||"-")+' · '+(isFullRound(cur)?"전체 진단(6개 영역)":("영역 재진단 · "+hcv(measuredOf(cur).map(k=>SUBM[k].s).join("·"))))+'</div>';
+  /* ⚠️ 리커트는 보기 1번이 "매우 그렇다"다 (LIKERT_KO 참고, 채점에서 6-v 로 뒤집는다).
+     예전 이 표는 1을 "전혀 아니다"로 적어 응답을 거꾸로 보여주고 있었다.
+     4지선다는 문항마다 보기 글이 다르므로 그 글을 그대로 쓴다. */
+  const labelOf=(q,v)=>{
+    if(!v)return "";
+    if(q.type==="likert")return LIKERT_KO[v-1]||"";
+    const op=q.opts||q.o;
+    return (op&&op[v-1])?op[v-1]:String(v);
+  };
+  const maxOf=q=>(s.grade<=2||q.type==="choice")?4:5;
+  o+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">';
+  o+='<div style="font-size:11px;color:var(--m)">'+hcv(cur.date||"-")+' · 응답자 '+hcv(cur.by||"-")+' · '+(isFullRound(cur)?"전체 진단(6개 영역)":("영역 재진단 · "+hcv(measuredOf(cur).map(k=>SUBM[k].s).join("·"))))+'</div>';
+  o+='<button id="btn-raw-edit" class="no-print" style="padding:6px 12px;border-radius:9px;border:1px solid '+(S.rawEdit?"transparent":"var(--b)")+';background:'+(S.rawEdit?"#0E8F68":"var(--s)")+';color:'+(S.rawEdit?"#fff":"var(--m)")+';font-size:11.5px;font-weight:700;cursor:pointer">'+(S.rawEdit?"✓ 고치기 끝내기":"✏️ 잘못 입력한 답 고치기")+'</button>';
+  o+='</div>';
+  if(S.rawEdit){
+    o+='<div style="padding:10px 13px;border-radius:10px;background:#FFF6E4;border:1px solid #F5D48A;font-size:11.5px;color:#8A6414;line-height:1.7;margin-bottom:10px">'
+      +'답을 바꾸면 <strong>그 회차 점수가 다시 계산되고 바로 저장됩니다.</strong></div>';
+  }
   o+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
   o+='<tr style="background:var(--bg)"><th style="padding:8px;width:34px;color:var(--m);font-weight:700;border-radius:8px 0 0 8px">#</th>';
   o+='<th style="padding:8px;width:42px;color:var(--m);font-weight:700">영역</th>';
@@ -2223,7 +2239,18 @@ function hRawAnswers(s){
     o+='<td style="padding:9px 8px;text-align:center;color:var(--m);font-weight:600">'+n+'</td>';
     o+='<td style="padding:9px 8px;text-align:center"><span style="font-size:10.5px;font-weight:800;color:'+DM[q.d].c+'">'+q.d+'</span></td>';
     o+='<td style="padding:9px 8px;line-height:1.6">'+hcv(q.text||q.t||"")+(q.sub?'<span style="display:block;font-size:10px;color:var(--m);margin-top:2px">'+hcv(q.sub)+'</span>':'')+'</td>';
-    o+='<td style="padding:9px 8px;text-align:center;font-weight:700;color:'+(low?"#E23D63":"var(--t)")+'">'+v+'<span style="font-size:10px;font-weight:600;color:var(--m);display:block;margin-top:1px">'+(LK[v]||"")+'</span></td></tr>';
+    if(S.rawEdit){
+      o+='<td style="padding:7px 8px;text-align:center">';
+      o+='<select class="rawsel" data-q="'+hcv(q.id)+'" style="width:100%;max-width:230px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--b);background:#fff;font-size:11.5px;font-family:inherit;cursor:pointer">';
+      for(let k=1;k<=maxOf(q);k++)
+        o+='<option value="'+k+'"'+(k===v?' selected':'')+'>'+k+'. '+hcv(labelOf(q,k))+'</option>';
+      o+='</select>';
+      o+='</td></tr>';
+    }else{
+      o+='<td style="padding:9px 8px;text-align:center;font-weight:700;color:'+(low?"#E23D63":"var(--t)")+'">'+v
+        +'<span style="font-size:10px;font-weight:600;color:var(--m);display:block;margin-top:1px">'+hcv(labelOf(q,v))+'</span>'
+        +'</td></tr>';
+    }
   });
   o+='</table></div>';
   if(!n)o+='<div style="font-size:12px;color:var(--m);padding:10px 0">이 회차의 문항 정보를 찾지 못했습니다. 설문 언어나 학년이 바뀌었을 수 있어요.</div>';
@@ -6524,8 +6551,41 @@ function bindEv(){
         toast(removed+"건을 정리했어요. "+left.length+"회차가 남았어요.");
       });
     });
-    on("btn-raw-toggle",()=>set({rawOpen:!S.rawOpen,rawTab:null}));
-    onA(".rawtab",e=>set({rawTab:Number(e.currentTarget.dataset.k)}));
+    on("btn-raw-toggle",()=>set({rawOpen:!S.rawOpen,rawTab:null,rawEdit:false}));
+    onA(".rawtab",e=>set({rawTab:Number(e.currentTarget.dataset.k),rawEdit:false}));
+    on("btn-raw-edit",()=>{
+      if(S.rawEdit){set({rawEdit:false});return;}
+      const pw=prompt("응답을 고치려면 관리자 비밀번호가 필요해요.");
+      if(pw==null)return;
+      if(pw!==ADMIN_PW){toast("비밀번호가 달라요.");return;}
+      set({rawEdit:true});
+    });
+    /* 응답 하나를 고치면 그 회차 점수를 다시 계산하고, 무엇을 바꿨는지 남긴다.
+       select 는 click 이 아니라 change 로 잡아야 한다. */
+    document.querySelectorAll(".rawsel").forEach(el=>el.addEventListener("change",e=>{
+      const sid=S.sid, qid=e.currentTarget.dataset.q, nv=Number(e.currentTarget.value)||0;
+      const stu=S.students.find(x=>x.id===sid); if(!stu)return;
+      const hist=(stu.scoreHistory||[]).slice();
+      const rows=hist.map((r,i)=>({i,r})).filter(x=>x.r.ans&&Object.keys(x.r.ans).length);
+      if(!rows.length)return;
+      const sel=Math.min(S.rawTab==null?rows.length-1:S.rawTab,rows.length-1);
+      const hi=rows[sel].i, cur=hist[hi];
+      const ov=Number(cur.ans[qid])||0;
+      if(ov===nv)return;
+      const ans={...cur.ans,[qid]:nv};
+      // 고친 답으로 다시 채점한다. 영역 재진단 회차면 앞 회차 점수 위에 덮는다.
+      const part=calcSc(ans,stu.grade,cur.lang||"ko",(cur.focus&&cur.focus.length)?cur.focus:null);
+      const base=(cur.focus&&cur.focus.length)?(hi>0?subScores(hist[hi-1].scores)||{}:{}):{};
+      const scores=rollup((cur.focus&&cur.focus.length)?{...base,...part}:part);
+      const edits=[...(cur.edits||[]),
+        {at:new Date().toISOString(),q:qid,from:ov,to:nv,by:(S.tcName||S.lAuth||"관리자")}];
+      hist[hi]={...cur,ans,scores,edits};
+      const us={...stu,scoreHistory:hist,scores:hist[hist.length-1].scores};
+      const next=S.students.map(x=>x.id===sid?us:x);
+      S.students=next; saveSt(next); set({students:next});
+      dbSaveStudent(us).then(r=>{ if(USE_DB()&&r===false)toast("기기에는 저장했어요. 연결되면 자동으로 보냅니다."); });
+      toast("고쳤어요 · "+ov+" → "+nv+" · 점수 다시 계산됨");
+    }));
     // ── 지원 프로그램 현황 ──
     on("btn-sup-toggle",()=>set({supOpen:!S.supOpen,supDom:S.supDom||SUBS[0]}));
     {
