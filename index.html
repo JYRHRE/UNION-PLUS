@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-15-01"/>
+<meta name="app-version" content="2026-11-15-02"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-15-01";
+const APP_VERSION = "2026-11-15-02";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1717,6 +1717,9 @@ async function dbSaveStudent(s){
       queuePending(s);
       return false;
     }
+    /* 방금 최신 상태를 저장했으니, 예전에 못 보내 쌓아둔 같은 학생의 옛 사본은 버린다.
+       안 버리면 다음 동기화 때 그 옛 사본이 서버를 덮어써서 고친 내용이 되돌아간다. */
+    if(isAuthed()){ try{ savePending(loadPending().filter(x=>x.id!==s.id)); }catch(e){} }
     S._saveErr="";
     return true;
   } catch(e){
@@ -1795,6 +1798,19 @@ function addRTomb(sid,r){
     const a=loadRTomb();
     if(a.indexOf(k)<0){a.push(k);localStorage.setItem(RTOMB_KEY,JSON.stringify(a.slice(-500)));}
   }catch(e){}
+}
+/* 날짜를 고친 회차가 원래 날짜로 되돌아오면, 그 날짜의 지움 표식은 걷어낸다 */
+function dropRTomb(sid,r){
+  try{
+    const k=String(sid)+"»"+roundKey(r);
+    const a=loadRTomb(), i=a.indexOf(k);
+    if(i>=0){a.splice(i,1);localStorage.setItem(RTOMB_KEY,JSON.stringify(a));}
+  }catch(e){}
+}
+/* 두 회차 목록이 같은 내용인지 (순서 무관) */
+function sameRounds(a,b){
+  const ka=(a||[]).map(roundKey).sort().join("¦"), kb=(b||[]).map(roundKey).sort().join("¦");
+  return ka===kb;
 }
 function mergeHist(sid, mine, theirs){
   const tomb=loadRTomb();
@@ -1910,9 +1926,11 @@ async function syncFromDB(){
         const mine=mineBy[String(sv.id)];
         if(!mine)return sv;
         const h=mergeHist(sv.id, mine.scoreHistory||[], sv.scoreHistory||[]);
-        const svN=(sv.scoreHistory||[]).length;
-        if(h.length===svN)return {...sv, scoreHistory:h};
-        const out={...sv, scoreHistory:h, scores:h.length?h[h.length-1].scores:sv.scores};
+        /* 개수만 비교하면 '날짜만 바뀐 회차'는 같은 것으로 보고 서버에 안 보낸다.
+           그러면 서버엔 옛 날짜가 남아, 다음에 들어올 때 옛 날짜로 되돌아간다. 내용으로 비교한다. */
+        if(sameRounds(h, sv.scoreHistory||[]))return {...sv, scoreHistory:h};
+        const out={...sv, scoreHistory:h, scores:h.length?h[h.length-1].scores:sv.scores,
+                   at:mine.at||sv.at};
         restore.push(out);          // 서버가 모르는 회차가 있다 — 되돌려 보낸다
         return out;
       });
@@ -6504,20 +6522,28 @@ function bindEv(){
     };
     // 분석완료일 수정 — 실제 진단한 날짜로 맞춘다
     document.querySelectorAll(".rd-date").forEach(el=>{
-      el.addEventListener("change",()=>{
+      el.addEventListener("change",async()=>{
         const idx=Number(el.dataset.i);
         const stu=S.students.find(x=>x.id===sid);if(!stu)return;
         const hist=(stu.scoreHistory&&stu.scoreHistory.length)?stu.scoreHistory.slice()
                    :(stu.scores?[{date:stu.at,scores:stu.scores}]:[]);
-        if(!hist[idx])return;
-        hist[idx]={...hist[idx],date:el.value||hist[idx].date};
+        if(!hist[idx]||!el.value||el.value===hist[idx].date)return;
+        const oldR=hist[idx];
+        const newR={...oldR,date:el.value};
+        /* 옛 날짜의 회차에 '지움' 표식을 남긴다.
+           회차는 날짜까지 넣어 구별하므로, 표식이 없으면 서버와 합칠 때
+           옛 날짜 회차가 '서버에만 있는 회차'로 보여 되살아난다. */
+        addRTomb(sid, oldR);
+        dropRTomb(sid, newR);
+        hist[idx]=newR;
         hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
         const us={...stu,scoreHistory:hist,scores:hist.length?hist[hist.length-1].scores:stu.scores,
                   at:atFromHist(hist,stu.at)};
         set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
         saveSt(S.students);
-        dbSaveStudent(us);
-        toast("분석완료일을 "+(el.value||"-")+"(으)로 바꿨어요. 등록일도 1회차 날짜("+(us.at||"-")+")에 맞췄어요.");
+        const ok=await dbSaveStudent(us);
+        if(USE_DB()&&ok===false)toast("⚠️ 화면에서는 바꿨지만 서버 저장에 실패했어요. 연결되면 자동으로 다시 보냅니다.");
+        else toast("분석완료일을 "+el.value+"(으)로 바꿨어요. 등록일도 1회차 날짜("+(us.at||"-")+")에 맞췄어요.");
       });
     });
     onA(".rd-del",e=>{
