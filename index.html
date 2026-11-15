@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-15-03"/>
+<meta name="app-version" content="2026-11-15-04"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-15-03";
+const APP_VERSION = "2026-11-15-04";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1548,7 +1548,8 @@ async function dbLoadStudents(retry){
       scores:r.scores||null,
       scoreHistory:r.score_history||[],
       logs:r.logs||[],
-      supports:r.supports||[]
+      supports:r.supports||[],
+      updatedAt:r.updated_at||""
     }));
   } catch(e){ /* silent */; return null; }
 }
@@ -1652,7 +1653,13 @@ async function dbFindStudentId(name,grade,cls){
   }catch(e){ return null; }
 }
 
+/* 이 기기에서 마지막으로 고친 시각 — 동기화가 늦게 도착한 서버 옛값으로 덮지 않게 */
+const LEDIT_KEY="union_ledit_v1";
+function loadLEdit(){ try{return JSON.parse(localStorage.getItem(LEDIT_KEY)||"{}");}catch(e){return {};} }
+function markLEdit(id,t){ try{const m=loadLEdit();m[String(id)]=t;localStorage.setItem(LEDIT_KEY,JSON.stringify(m));}catch(e){} }
 async function dbSaveStudent(s){
+  const _t=new Date().toISOString();
+  markLEdit(s&&s.id,_t);
   if(!USE_DB()||!SB_URL||!SB_KEY) return;
   try {
     const row = {
@@ -1673,7 +1680,7 @@ async function dbSaveStudent(s){
       score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
       logs:Array.isArray(s.logs)?s.logs:[],
       supports:Array.isArray(s.supports)?s.supports:[],
-      updated_at:new Date().toISOString()
+      updated_at:_t
     };
     /* ⚠️ append_only 는 표의 칸이 아니라 submit_student 통로만 아는 표시다.
        이걸 students 표에 그대로 보내면 "표에 없는 항목"이라며 줄 전체가 거부된다.
@@ -1738,7 +1745,7 @@ function savePending(a){ try{localStorage.setItem(PENDING_KEY,JSON.stringify(a))
 function queuePending(s){
   if(!s||!s.id)return;
   const a=loadPending().filter(x=>x.id!==s.id);
-  a.push(s); savePending(a.slice(-100));
+  a.push({...s,_q:loadLEdit()[String(s.id)]||new Date().toISOString()}); savePending(a.slice(-100));
 }
 async function flushPending(){
   if(!USE_DB())return {sent:0,left:0};
@@ -1755,7 +1762,7 @@ async function flushPending(){
           at:String(s.at||td()),scores:s.scores||null,
           score_history:Array.isArray(s.scoreHistory)?s.scoreHistory:[],
           logs:Array.isArray(s.logs)?s.logs:[],supports:Array.isArray(s.supports)?s.supports:[],
-          updated_at:new Date().toISOString()};   // append_only 는 표의 칸이 아니므로 여기 넣지 않는다
+          updated_at:s._q||new Date().toISOString()};   // append_only 는 표의 칸이 아니므로 여기 넣지 않는다
       const res = isAuthed()
         ? await fetch(SB_URL+"/rest/v1/students",{method:"POST",
             headers:authHeaders({"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"}),
@@ -1926,16 +1933,22 @@ async function syncFromDB(){
          그 옛 회차는 아직 이 기기에 남아 있다. 둘을 합쳐야 한 쪽도 잃지 않는다. */
       const mineBy={}; (S.students||[]).forEach(x=>{ mineBy[String(x.id)]=x; });
       const restore=[];
-      const merged=filtered.map(sv=>{
-        const mine=mineBy[String(sv.id)];
-        if(!mine)return sv;
-        const h=mergeHist(sv.id, mine.scoreHistory||[], sv.scoreHistory||[]);
+      const ledit=loadLEdit();
+      const merged=filtered.map(sv0=>{
+        const mine=mineBy[String(sv0.id)];
+        if(!mine)return sv0;
+        /* 이 기기에서 고친 뒤 서버 저장이 아직 반영되지 않은 학생은
+           국가·유형·등록일·메모 같은 항목을 이 기기 값으로 지킨다. */
+        const lt=ledit[String(sv0.id)]||"";
+        const mineNewer=lt && lt>String(sv0.updatedAt||"");
+        const sv=mineNewer?{...sv0,...mine,updatedAt:sv0.updatedAt}:sv0;
+        const h=mergeHist(sv.id, mine.scoreHistory||[], sv0.scoreHistory||[]);
         /* 개수만 비교하면 '날짜만 바뀐 회차'는 같은 것으로 보고 서버에 안 보낸다.
            그러면 서버엔 옛 날짜가 남아, 다음에 들어올 때 옛 날짜로 되돌아간다. 내용으로 비교한다. */
-        if(sameRounds(h, sv.scoreHistory||[]))return {...sv, scoreHistory:h};
+        if(!mineNewer && sameRounds(h, sv0.scoreHistory||[]))return {...sv, scoreHistory:h};
         const out={...sv, scoreHistory:h, scores:h.length?h[h.length-1].scores:sv.scores,
-                   at:mine.at||sv.at};
-        restore.push(out);          // 서버가 모르는 회차가 있다 — 되돌려 보낸다
+                   at:sv.at};
+        restore.push(out);          // 서버가 모르는 내용이 있다 — 되돌려 보낸다
         return out;
       });
       S.students = merged; saveSt(merged);
@@ -2391,7 +2404,10 @@ async function autoNeis(s,force){
   _autoBusy=null;
   if(!text){ if(ld)ld.style.display="none"; return; }
 
-  const us={...s, aiDraft:{text,round:rnd,mode,at:td()}};
+  /* AI 초안을 만드는 몇 초 사이에 선생님이 국가·유형·날짜를 고쳤을 수 있다.
+     화면을 열 때 받아 둔 옛 사본(s)에 붙이면 그 수정이 지워지므로, 지금 학생에 붙인다. */
+  const curS=(S.students||[]).find(x=>x.id===s.id)||s;
+  const us={...curS, aiDraft:{text,round:rnd,mode,at:td()}};
   S.neisText=text;
   S.students=S.students.map(x=>x.id===s.id?us:x);
   saveSt(S.students);
@@ -4297,7 +4313,8 @@ body+='<div id="sec-basic" class="sec-anchor"></div><div class="card" style="pad
 +'<select id="qk-stype" class="no-print" style="width:100%;margin-top:4px;padding:4px 2px;border:none;background:transparent;font-size:12.5px;font-weight:700;color:var(--t);font-family:inherit;cursor:pointer;outline:none">'
 +STYPES.map(c=>'<option value="'+hcv(c)+'"'+((s.stype||"일반학생")===c?" selected":"")+'>'+hcv(c)+'</option>').join("")+'</select>'
 +'<div class="print-only" style="font-size:12.5px;font-weight:700;margin-top:3px">'+hcv(s.stype||"일반학생")+'</div></div>'
-+'</div><div style="font-size:10.5px;color:var(--m);margin-top:9px;line-height:1.6">등록일·출신국가·학생 유형은 여기서 바로 고칠 수 있어요. 바꾸면 바로 저장됩니다.<br>아래에서 <strong>1회차 분석완료일</strong>을 고치면 등록일도 그 날짜에 자동으로 맞춰집니다.</div></div>';
++'</div><div class="no-print" style="display:flex;align-items:flex-start;gap:12px;margin-top:10px"><div style="flex:1;font-size:10.5px;color:var(--m);line-height:1.6">등록일·출신국가·학생 유형을 고친 뒤 <strong>[기본 정보 저장]</strong>을 눌러 주세요.<br>아래에서 <strong>1회차 분석완료일</strong>을 고치면 등록일도 그 날짜에 자동으로 맞춰집니다.</div>'
++'<button id="qk-save" disabled style="flex-shrink:0;background:var(--p);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;font-family:inherit;opacity:.45;cursor:default">💾 기본 정보 저장</button></div></div>';
 /* 화면을 내려가는 순서가 곧 일하는 순서가 되도록 배치한다.
    STEP 1 진단 → STEP 2 지원 → STEP 3 성장 → STEP 4 기록 */
 body+=hStepBar(1);
@@ -6485,19 +6502,45 @@ function bindEv(){
       }
     }
     on("btn-print",()=>{ setTimeout(()=>window.print(),80); });
-    // 출신국가·학생유형 즉시 저장
-    [["qk-country","country","출신국가"],["qk-stype","stype","학생 유형"],["qk-at","at","등록일"]].forEach(([id,key,label])=>{
-      const el=document.getElementById(id);
-      if(!el)return;
-      el.addEventListener("change",()=>{
+    // 출신국가·학생유형·등록일 — 고른 뒤 [기본 정보 저장]을 눌러 저장
+    {
+      const QK=[["qk-country","country","대한민국"],["qk-stype","stype","일반학생"],["qk-at","at",""]];
+      const qkBtn=document.getElementById("qk-save");
+      const qkDiff=()=>{
+        const stu=S.students.find(x=>x.id===sid);const ch={};
+        if(!stu)return ch;
+        QK.forEach(([id,key,def])=>{
+          const el=document.getElementById(id);
+          if(el&&el.value&&el.value!==(stu[key]||def))ch[key]=el.value;
+        });
+        return ch;
+      };
+      const qkMark=()=>{
+        if(!qkBtn)return;
+        const ch=qkDiff(), n=Object.keys(ch).length;
+        QK.forEach(([id,key])=>{
+          const el=document.getElementById(id);if(!el)return;
+          const box=el.closest('div[style*="border-radius:10px"]');
+          if(box)box.style.boxShadow=(key in ch)?"inset 0 0 0 2px var(--p)":"";
+        });
+        qkBtn.disabled=!n; qkBtn.style.opacity=n?"1":".45"; qkBtn.style.cursor=n?"pointer":"default";
+        qkBtn.textContent=n?("💾 기본 정보 저장 ("+n+")"):"💾 기본 정보 저장";
+      };
+      QK.forEach(([id])=>{const el=document.getElementById(id);
+        if(el){el.addEventListener("change",qkMark);el.addEventListener("input",qkMark);}});
+      if(qkBtn)qkBtn.addEventListener("click",async()=>{
         const stu=S.students.find(x=>x.id===sid);if(!stu)return;
-        const us={...stu,[key]:el.value};
+        const ch=qkDiff();
+        if(!Object.keys(ch).length){toast("바뀐 내용이 없어요.");return;}
+        const us={...stu,...ch};
+        qkBtn.disabled=true; qkBtn.textContent="저장 중...";
         set({students:S.students.map(x=>x.id===sid?us:x)});
         saveSt(S.students);
-        dbSaveStudent(us);
-        toast(label+"을(를) "+el.value+"(으)로 바꿨어요.");
+        const ok=await dbSaveStudent(us);
+        if(USE_DB()&&ok===false)toast("⚠️ 화면에서는 바꿨지만 서버 저장에 실패했어요. 연결되면 자동으로 다시 보냅니다.");
+        else toast("✅ 기본 정보를 저장했어요.");
       });
-    });
+    }
     // 화면을 연 뒤 종합의견을 자동으로 채운다
     {
       const stu0=S.students.find(x=>x.id===sid);
