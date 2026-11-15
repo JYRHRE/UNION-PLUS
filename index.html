@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-15-02"/>
+<meta name="app-version" content="2026-11-15-03"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-15-02";
+const APP_VERSION = "2026-11-15-03";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
@@ -1786,41 +1786,45 @@ function dropTomb(ids){ try{const keep=loadTomb().filter(x=>ids.indexOf(x)>=0);l
      · 회차 지움 표식 — 선생님이 일부러 지운 회차가 되살아나지 않게
      · mergeHist     — 동기화할 때 서버와 이 기기의 회차를 합집합으로 */
 const RTOMB_KEY="union_rtomb_v1";
+/* 회차의 '내용' — 날짜·잰 영역·점수 */
 function roundKey(r){
   if(!r)return "";
   return (r.date||"")+"|"+measuredOf(r).join("/")+"|"
         +SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
 }
+/* 회차의 '이름표' — 날짜를 고쳐도 바뀌지 않는다.
+   처음 날짜를 고칠 때 그때의 내용(roundKey)을 rid 로 박아 둔다.
+   그래서 날짜를 고치기 전 사본(다른 기기·서버)과 고친 뒤 사본이 같은 회차로 묶인다.
+   rid 가 없는 회차는 내용이 곧 이름표다 (예전 지움 표식과도 그대로 맞는다). */
+function roundId(r){ return r ? (r.rid || roundKey(r)) : ""; }
 function loadRTomb(){ try{return JSON.parse(localStorage.getItem(RTOMB_KEY)||"[]");}catch(e){return [];} }
 function addRTomb(sid,r){
   try{
-    const k=String(sid)+"»"+roundKey(r);
+    const k=String(sid)+"»"+roundId(r);
     const a=loadRTomb();
     if(a.indexOf(k)<0){a.push(k);localStorage.setItem(RTOMB_KEY,JSON.stringify(a.slice(-500)));}
   }catch(e){}
 }
-/* 날짜를 고친 회차가 원래 날짜로 되돌아오면, 그 날짜의 지움 표식은 걷어낸다 */
-function dropRTomb(sid,r){
-  try{
-    const k=String(sid)+"»"+roundKey(r);
-    const a=loadRTomb(), i=a.indexOf(k);
-    if(i>=0){a.splice(i,1);localStorage.setItem(RTOMB_KEY,JSON.stringify(a));}
-  }catch(e){}
-}
-/* 두 회차 목록이 같은 내용인지 (순서 무관) */
+/* 두 회차 목록이 같은 내용인지 (순서 무관) — 날짜가 달라도 '다르다'로 본다 */
 function sameRounds(a,b){
-  const ka=(a||[]).map(roundKey).sort().join("¦"), kb=(b||[]).map(roundKey).sort().join("¦");
-  return ka===kb;
+  const f=x=>(x||[]).map(r=>roundId(r)+"#"+roundKey(r)).sort().join("¦");
+  return f(a)===f(b);
 }
+/* 서버와 이 기기의 회차를 합친다.
+   같은 회차(같은 이름표)가 양쪽에 있으면 둘 다 남기지 않고 하나만 고른다 —
+   날짜를 더 나중에 고친 쪽(dAt)이 이긴다. 그래서 날짜를 바꿔도 회차가 둘로 늘거나
+   옛 날짜로 되돌아가지 않고, 어느 쪽의 회차도 지우지 않는다. */
 function mergeHist(sid, mine, theirs){
   const tomb=loadRTomb();
   const gone=k=>tomb.indexOf(String(sid)+"»"+k)>=0;
-  const out=[], seen={};
+  const pos={}, out=[];
   [...(theirs||[]), ...(mine||[])].forEach(r=>{
     if(!r)return;
-    const k=roundKey(r);
-    if(gone(k)||seen[k])return;
-    seen[k]=1; out.push(r);
+    const id=roundId(r);
+    if(gone(id))return;
+    if(pos[id]==null){ pos[id]=out.length; out.push(r); return; }
+    const cur=out[pos[id]];
+    if(String(r.dAt||"")>String(cur.dAt||"")) out[pos[id]]=r;
   });
   out.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
   return out;
@@ -3141,7 +3145,10 @@ function hDiagSummary(s){
     o+='<td class="no-print" style="padding:11px 6px;text-align:center"><button class="rd-del" data-i="'+i+'" title="'+(i+1)+'회차 삭제" style="background:#FFF0F3;color:var(--d);border:none;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">삭제</button></td></tr>';
   });
   o+='</table></div>';
-  o+='<div class="no-print" style="font-size:11px;color:var(--m);margin-top:9px;line-height:1.6">분석완료일을 실제 진단한 날짜로 고칠 수 있어요. 바꾸면 바로 저장되고, 회차 순서도 날짜에 맞춰 정리됩니다.<br>가장 이른 회차의 날짜로 <strong>위의 등록일도 함께 맞춰집니다.</strong></div>';
+  o+='<div class="no-print" style="display:flex;align-items:flex-start;gap:12px;margin-top:10px">';
+  o+='<div style="flex:1;font-size:11px;color:var(--m);line-height:1.6">분석완료일을 실제 진단한 날짜로 고친 뒤 <strong>[날짜 저장]</strong>을 눌러 주세요. 점수는 그대로 두고 날짜만 바뀌며, 회차 순서도 날짜에 맞춰 정리됩니다.<br>가장 이른 회차의 날짜로 <strong>위의 등록일도 함께 맞춰집니다.</strong></div>';
+  o+='<button id="rd-date-save" disabled style="flex-shrink:0;background:var(--p);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;font-family:inherit;opacity:.45;cursor:default">💾 날짜 저장</button>';
+  o+='</div>';
   // 같은 날 같은 점수가 반복되면 실수로 여러 번 제출된 것이다
   const dupN=(()=>{const seen=new Set();let n=0;
     rows.forEach(r=>{const key=(r.date||"")+"|"+SUBS.map(k=>(subScores(r.scores)||{})[k]).join(",");
@@ -6520,31 +6527,49 @@ function bindEv(){
       const r=await dbSaveStudent(us);
       if(USE_DB()&&r===false)toast("⚠️ 화면에서는 지웠지만 서버 반영에 실패했어요. 관리자 화면에서 확인해 주세요.");
     };
-    // 분석완료일 수정 — 실제 진단한 날짜로 맞춘다
-    document.querySelectorAll(".rd-date").forEach(el=>{
-      el.addEventListener("change",async()=>{
-        const idx=Number(el.dataset.i);
-        const stu=S.students.find(x=>x.id===sid);if(!stu)return;
-        const hist=(stu.scoreHistory&&stu.scoreHistory.length)?stu.scoreHistory.slice()
-                   :(stu.scores?[{date:stu.at,scores:stu.scores}]:[]);
-        if(!hist[idx]||!el.value||el.value===hist[idx].date)return;
-        const oldR=hist[idx];
-        const newR={...oldR,date:el.value};
-        /* 옛 날짜의 회차에 '지움' 표식을 남긴다.
-           회차는 날짜까지 넣어 구별하므로, 표식이 없으면 서버와 합칠 때
-           옛 날짜 회차가 '서버에만 있는 회차'로 보여 되살아난다. */
-        addRTomb(sid, oldR);
-        dropRTomb(sid, newR);
-        hist[idx]=newR;
-        hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
-        const us={...stu,scoreHistory:hist,scores:hist.length?hist[hist.length-1].scores:stu.scores,
-                  at:atFromHist(hist,stu.at)};
-        set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
-        saveSt(S.students);
-        const ok=await dbSaveStudent(us);
-        if(USE_DB()&&ok===false)toast("⚠️ 화면에서는 바꿨지만 서버 저장에 실패했어요. 연결되면 자동으로 다시 보냅니다.");
-        else toast("분석완료일을 "+el.value+"(으)로 바꿨어요. 등록일도 1회차 날짜("+(us.at||"-")+")에 맞췄어요.");
+    // 분석완료일 수정 — 고르기만 하고, [날짜 저장]을 눌러야 저장된다
+    const rdSaveBtn=document.getElementById("rd-date-save");
+    const rdDirty=()=>{
+      const stu=S.students.find(x=>x.id===sid);if(!stu||!rdSaveBtn)return;
+      const hist=roundsOf(stu);
+      let n=0;
+      document.querySelectorAll(".rd-date").forEach(el=>{
+        const r=hist[Number(el.dataset.i)];
+        const ch=!!(r&&el.value&&el.value!==r.date);
+        el.style.borderColor=ch?"var(--p)":"var(--b)";
+        el.style.background=ch?"#EEF0FF":"var(--s)";
+        if(ch)n++;
       });
+      rdSaveBtn.disabled=!n;
+      rdSaveBtn.style.opacity=n?"1":".45";
+      rdSaveBtn.style.cursor=n?"pointer":"default";
+      rdSaveBtn.textContent=n?("💾 날짜 저장 ("+n+")"):"💾 날짜 저장";
+    };
+    document.querySelectorAll(".rd-date").forEach(el=>{
+      el.addEventListener("change",rdDirty);
+      el.addEventListener("input",rdDirty);
+    });
+    if(rdSaveBtn)rdSaveBtn.addEventListener("click",async()=>{
+      const stu=S.students.find(x=>x.id===sid);if(!stu)return;
+      const hist=roundsOf(stu).slice();
+      const now=new Date().toISOString();
+      let n=0;
+      document.querySelectorAll(".rd-date").forEach(el=>{
+        const i=Number(el.dataset.i), r=hist[i];
+        if(!r||!/^\d{4}-\d{2}-\d{2}$/.test(el.value)||el.value===r.date)return;
+        // 이름표(rid)는 날짜를 고치기 전 내용으로 한 번만 박는다 — 점수·답안은 그대로 둔다
+        hist[i]={...r, rid:roundId(r), date:el.value, dAt:now};
+        n++;
+      });
+      if(!n){toast("바뀐 날짜가 없어요.");return;}
+      hist.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+      const us={...stu,scoreHistory:hist,scores:hist[hist.length-1].scores,at:atFromHist(hist,stu.at)};
+      rdSaveBtn.disabled=true; rdSaveBtn.textContent="저장 중...";
+      set({students:S.students.map(x=>x.id===sid?us:x),roundTab:null});
+      saveSt(S.students);
+      const ok=await dbSaveStudent(us);
+      if(USE_DB()&&ok===false)toast("⚠️ 화면에서는 바꿨지만 서버 저장에 실패했어요. 연결되면 자동으로 다시 보냅니다.");
+      else toast("✅ 분석완료일 "+n+"건을 저장했어요. 등록일도 1회차 날짜("+(us.at||"-")+")에 맞췄어요.");
     });
     onA(".rd-del",e=>{
       const idx=Number(e.currentTarget.dataset.i);
