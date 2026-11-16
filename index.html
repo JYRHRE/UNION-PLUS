@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="app-version" content="2026-11-15-04"/>
+<meta name="app-version" content="2026-11-16-01"/>
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>UNION+ 다문화 역량 진단</title>
@@ -299,8 +299,8 @@ const LOG_TAGS=["다양성 그림책","멘토링","문화체험","상담","협�
 const GRADES=[1,2,3,4,5,6];
 const CLASSES=[1,2];
 const EXT_ORGS=["지역사회 복지관","다문화가족지원센터","교육청 Wee센터","청소년상담복지센터","이주민지원센터","기타 외부기관"];
-const COUNTRIES=["대한민국","베트남","중국","필리핀","일본","태국","캄보디아","몽골","러시아","우즈베키스탄","카자흐스탄","키르기스스탄","네팔","인도네시아","미얀마","방글라데시","스리랑카","파키스탄","인도","미국","캐나다","기타"];
-const FLAG={"대한민국":"\uD83C\uDDF0\uD83C\uDDF7","베트남":"\uD83C\uDDFB\uD83C\uDDF3","중국":"\uD83C\uDDE8\uD83C\uDDF3","필리핀":"\uD83C\uDDF5\uD83C\uDDED","일본":"\uD83C\uDDEF\uD83C\uDDF5","태국":"\uD83C\uDDF9\uD83C\uDDED","캄보디아":"\uD83C\uDDF0\uD83C\uDDED","몽골":"\uD83C\uDDF2\uD83C\uDDF3","러시아":"\uD83C\uDDF7\uD83C\uDDFA","우즈베키스탄":"\uD83C\uDDFA\uD83C\uDDFF","카자흐스탄":"\uD83C\uDDF0\uD83C\uDDFF","키르기스스탄":"\uD83C\uDDF0\uD83C\uDDEC","네팔":"\uD83C\uDDF3\uD83C\uDDF5","인도네시아":"\uD83C\uDDEE\uD83C\uDDE9","미얀마":"\uD83C\uDDF2\uD83C\uDDF2","방글라데시":"\uD83C\uDDE7\uD83C\uDDE9","스리랑카":"\uD83C\uDDF1\uD83C\uDDF0","파키스탄":"\uD83C\uDDF5\uD83C\uDDF0","인도":"\uD83C\uDDEE\uD83C\uDDF3","미국":"\uD83C\uDDFA\uD83C\uDDF8","캐나다":"\uD83C\uDDE8\uD83C\uDDE6","기타":"\uD83C\uDF0F"};
+const COUNTRIES=["대한민국","베트남","중국","필리핀","일본","태국","캄보디아","몽골","러시아","우즈베키스탄","카자흐스탄","키르기스스탄","네팔","인도네시아","미얀마","방글라데시","스리랑카","파키스탄","인도","미국","캐나다","이집트","기타"];
+const FLAG={"대한민국":"\uD83C\uDDF0\uD83C\uDDF7","베트남":"\uD83C\uDDFB\uD83C\uDDF3","중국":"\uD83C\uDDE8\uD83C\uDDF3","필리핀":"\uD83C\uDDF5\uD83C\uDDED","일본":"\uD83C\uDDEF\uD83C\uDDF5","태국":"\uD83C\uDDF9\uD83C\uDDED","캄보디아":"\uD83C\uDDF0\uD83C\uDDED","몽골":"\uD83C\uDDF2\uD83C\uDDF3","러시아":"\uD83C\uDDF7\uD83C\uDDFA","우즈베키스탄":"\uD83C\uDDFA\uD83C\uDDFF","카자흐스탄":"\uD83C\uDDF0\uD83C\uDDFF","키르기스스탄":"\uD83C\uDDF0\uD83C\uDDEC","네팔":"\uD83C\uDDF3\uD83C\uDDF5","인도네시아":"\uD83C\uDDEE\uD83C\uDDE9","미얀마":"\uD83C\uDDF2\uD83C\uDDF2","방글라데시":"\uD83C\uDDE7\uD83C\uDDE9","스리랑카":"\uD83C\uDDF1\uD83C\uDDF0","파키스탄":"\uD83C\uDDF5\uD83C\uDDF0","인도":"\uD83C\uDDEE\uD83C\uDDF3","미국":"\uD83C\uDDFA\uD83C\uDDF8","캐나다":"\uD83C\uDDE8\uD83C\uDDE6","이집트":"\uD83C\uDDEA\uD83C\uDDEC","기타":"\uD83C\uDF0F"};
 const STYPES=["국제결혼가정(국내출생)","국제결혼가정(중도입국)","외국인가정","탈북학생","일반학생"];
 const STY_C={"국제결혼가정(국내출생)":"#5B6EE8","국제결혼가정(중도입국)":"#F5A623","외국인가정":"#22C79A","탈북학생":"#E8445A","일반학생":"#8A8FA3"};
 const SUP_ST=["예정","진행중","완료"];
@@ -316,7 +316,7 @@ function hFlag(c){return FLAG[c]||"\uD83C\uDF0F";}
 const ISO={"대한민국":"kr","베트남":"vn","중국":"cn","필리핀":"ph","일본":"jp","태국":"th",
  "캄보디아":"kh","몽골":"mn","러시아":"ru","우즈베키스탄":"uz","카자흐스탄":"kz","키르기스스탄":"kg",
  "네팔":"np","인도네시아":"id","미얀마":"mm","방글라데시":"bd","스리랑카":"lk","파키스탄":"pk",
- "인도":"in","미국":"us","캐나다":"ca"};
+ "인도":"in","미국":"us","캐나다":"ca","이집트":"eg"};
 
 // 작은 국기 이미지. 불러오지 못하면 국가코드 칩이 대신 보인다.
 function hFlagImg(c,w){
@@ -1088,7 +1088,7 @@ function resetDemo(){ try{localStorage.removeItem(DEMO_KEY);}catch(e){} return d
    파일을 새로 올릴 때마다 이 값을 바꿔주세요.
    그러면 선생님들 브라우저가 옛 화면을 붙들고 있어도
    앱이 알아서 새 버전을 감지해 한 번 새로고침합니다. */
-const APP_VERSION = "2026-11-15-04";
+const APP_VERSION = "2026-11-16-01";
 
 // 브라우저가 캐시해 둔 옛 화면을 붙들고 있는지 확인한다.
 // GitHub Pages에 새로 올려도 캐시 때문에 옛 버전이 뜨는 일이 잦아서 넣었다.
